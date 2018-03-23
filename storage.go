@@ -12,17 +12,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type DbConfig struct {
-	Host     string
-	User     string
-	Name     string
-	Password string
-}
-
-type Config struct {
-	RawMails string
-}
-
 type Querier func(args ...interface{}) (*sql.Rows, error)
 
 // func (qf Query) prepared(db *sql.DB, qs string) func(...interface{}) (*sql.Rows, error) {
@@ -48,7 +37,7 @@ func noopQ(name string) Querier {
 	}
 }
 
-func (c Config) makeQ(db *sql.DB, name string) Querier {
+func (c Tables) makeQ(db *sql.DB, name string) Querier {
 	qs, ok := namedQueries[name]
 	if ok == false {
 		return noopQ(name)
@@ -73,7 +62,7 @@ func (c Config) makeQ(db *sql.DB, name string) Querier {
 	}
 }
 
-func (c Config) q(db *sql.DB, name string) Querier {
+func (c Tables) q(db *sql.DB, name string) Querier {
 	f, ok := cachedQueriers[name]
 	if ok == false {
 		f = c.makeQ(db, name)
@@ -84,12 +73,12 @@ func (c Config) q(db *sql.DB, name string) Querier {
 }
 
 type Store struct {
-	Config Config
+	Tables Tables
 	Db     *sql.DB
 }
 
 func (store Store) Query(name string, args ...interface{}) (*sql.Rows, error) {
-	f := store.Config.q(store.Db, name)
+	f := store.Tables.q(store.Db, name)
 	return f(args...)
 }
 
@@ -99,20 +88,54 @@ func (store Store) Register(name string, qs string) {
 	namedQueriesMut.Unlock()
 }
 
+type queryFunc func(cb rowsCb, cells ...interface{}) (int, error)
+
+func (store Store) QueryFunc(name string, args ...interface{}) queryFunc {
+	f := func(cb rowsCb, cells ...interface{}) (int, error) {
+		rows, err := store.Query(name, args...)
+		if err != nil {
+			return 0, err
+		}
+		WithRows(rows, cb, cells...)
+		return 1, nil
+	}
+
+	return f
+}
+
 func connString(dbc DbConfig) string {
 	return "host=" + dbc.Host + " user=" + dbc.User + " dbname=" + dbc.Name + " password=" + dbc.Password
 }
 
-func NewStore(dbc DbConfig) Store {
+func NewStore(dbc DbConfig, tables Tables) Store {
+	log.Println(connString(dbc))
 	db, err := sql.Open("postgres", connString(dbc))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	return Store{
-		Config: Config{
-			RawMails: "raw_emails",
-		},
-		Db: db,
+		Tables: tables,
+		Db:     db,
+	}
+}
+
+type rowsCb func(args ...interface{})
+
+func WithRows(rows *sql.Rows, cb rowsCb, args ...interface{}) {
+	for rows.Next() {
+		scanError := rows.Scan(args...)
+		if scanError != nil {
+			errMesg := scanError.Error()
+			log.Printf("Error [WithRows] %s", errMesg)
+		} else {
+			cb(args...)
+		}
+	}
+}
+
+func RowCallback(f func()) rowsCb {
+	return func(args ...interface{}) {
+		f()
 	}
 }

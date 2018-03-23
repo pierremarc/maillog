@@ -36,11 +36,20 @@ func getRecipent(to []string) (string, error) {
 	return "", makeError("Empty recipients list")
 }
 
+func withAnswer(topic string) (string, string) {
+	return "", nil
+}
+
 func makeHandler(cont chan string, store Store) smtpd.Handler {
 
 	store.Register("mail/log",
 		`INSERT INTO {{.RawMails}} (sender, topic, subject, message)
-		VALUES ($1, $2, $3, $4)`)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id`)
+
+	store.Register("mail/answer",
+		`INSERT INTO {{.Answers}} (parent, child)
+		VALUES ($1, $2)`)
 
 	return func(origin net.Addr, from string, to []string, data []byte) {
 
@@ -54,14 +63,15 @@ func makeHandler(cont chan string, store Store) smtpd.Handler {
 		subject := msg.Header.Get("Subject")
 		cont <- fmt.Sprintf("Received mail from %s for %s with subject %s", from, recipient, subject)
 
-		_, err = store.Query("mail/log", from, recipient, subject, data)
+		rows, err = store.Query("mail/log", from, recipient, subject, data)
 		if err != nil {
 			cont <- err.Error()
 		}
 	}
 }
 
-func StartSMTP(cont chan string, store Store) {
+func StartSMTP(cont chan string, iface string, store Store) {
 	handler := makeHandler(cont, store)
-	smtpd.ListenAndServe("127.0.0.1:2525", handler, "MailLog", "")
+	cont <- fmt.Sprintf("SMTPD ready on %s", iface)
+	smtpd.ListenAndServe(iface, handler, "MailLog", "Wow")
 }
