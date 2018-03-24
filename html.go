@@ -12,13 +12,17 @@ type pair struct {
 	v string
 }
 
-type Attributes []pair
+type attributes []pair
 
-func NewAttr() Attributes {
-	return Attributes{}
+func NewAttr() attributes {
+	return attributes{}
 }
 
-func (a Attributes) Add(k string, v string) Attributes {
+func ClassAttr(class string) attributes {
+	return NewAttr().Set("class", class)
+}
+
+func (a attributes) Set(k string, v string) attributes {
 	return append(a, pair{k, v})
 }
 
@@ -37,7 +41,7 @@ func (t textNode) Content() string {
 type Node interface {
 	Text() TextNode
 	Tag() string
-	Attrs() Attributes
+	Attrs() attributes
 	Children() []Node
 	Append(n ...Node) *node
 	Render() string
@@ -46,7 +50,7 @@ type Node interface {
 type node struct {
 	txt      TextNode
 	tag      string
-	attrs    Attributes
+	attrs    attributes
 	children []Node
 }
 
@@ -56,7 +60,7 @@ func (n node) Text() TextNode {
 func (n node) Tag() string {
 	return n.tag
 }
-func (n node) Attrs() Attributes {
+func (n node) Attrs() attributes {
 	return n.attrs
 }
 func (n node) Children() []Node {
@@ -93,7 +97,7 @@ func (n node) Render() string {
 	return renderNode(n)
 }
 
-func createNode(tag string, attrs Attributes, children ...Node) Node {
+func createNode(tag string, attrs attributes, children ...Node) Node {
 	n := new(node)
 	n.tag = tag
 	n.attrs = attrs
@@ -101,27 +105,29 @@ func createNode(tag string, attrs Attributes, children ...Node) Node {
 	return n
 }
 
-type factoryFunc func(attrs Attributes, children ...Node) Node
+type factoryFunc func(attrs attributes, children ...Node) Node
 
 func factory(tag string) factoryFunc {
-	f := func(attrs Attributes, children ...Node) Node {
+	f := func(attrs attributes, children ...Node) Node {
 		return createNode(tag, attrs, children...)
 	}
 	return f
 }
 
 var (
-	Div      = factory("DIV")
-	P        = factory("P")
-	Span     = factory("SPAN")
-	H1       = factory("H1")
-	H2       = factory("H2")
-	H3       = factory("H3")
-	A        = factory("A")
-	Pre      = factory("PRE")
-	Img      = factory("IMG")
-	Style    = factory("STYLE")
-	HeadLink = factory("LINK")
+	NoDisplay = factory("DIV")(NewAttr().Set("style", "display:none"))
+	Div       = factory("DIV")
+	P         = factory("P")
+	Span      = factory("SPAN")
+	H1        = factory("H1")
+	H2        = factory("H2")
+	H3        = factory("H3")
+	A         = factory("A")
+	Pre       = factory("PRE")
+	Img       = factory("IMG")
+	Style     = factory("STYLE")
+	HeadLink  = factory("LINK")
+	HeadMeta  = factory("META")
 )
 
 func Text(content string) Node {

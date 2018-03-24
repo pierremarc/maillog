@@ -1,3 +1,6 @@
+//go:generate futil -type option -import time  String=string UInt64=uint64 Node=Node Time=time.Time Error=error
+//go:generate futil -type result -import database/sql Bool=bool Node=Node SqlDB=*sql.DB  Error=error Store=Store
+//go:generate futil -type array   Int=int String=string
 package main
 
 import (

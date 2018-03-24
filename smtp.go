@@ -37,15 +37,15 @@ func getRecipent(to []string) OptionString {
 	return NoneString()
 }
 
-func getAnswer(topic string) OptionUint64 {
+func getAnswer(topic string) OptionUInt64 {
 	parts := strings.Split(topic, "+")
 	if len(parts) > 1 {
 		i, err := strconv.ParseUint(parts[1], 10, 32)
 		if err == nil {
-			return SomeUint64(i)
+			return SomeUInt64(i)
 		}
 	}
-	return NoneUint64()
+	return NoneUInt64()
 }
 
 func makeHandler(cont chan string, store Store) smtpd.Handler {

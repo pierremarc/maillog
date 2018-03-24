@@ -92,20 +92,20 @@ func (store Store) Register(name string, qs string) {
 	log.Printf("Register Success %s", name)
 }
 
-type queryFunc func(cb rowsCb, cells ...interface{}) OptionError
+type queryFunc func(cb rowsCb, cells ...interface{}) ResultBool
 
 func (qf queryFunc) Exec() {
 	qf(RowCallback(func() {}))
 }
 
 func (store Store) QueryFunc(name string, args ...interface{}) queryFunc {
-	f := func(cb rowsCb, cells ...interface{}) OptionError {
+	f := func(cb rowsCb, cells ...interface{}) ResultBool {
 		rows, err := store.Query(name, args...)
 		if err != nil {
-			return SomeError(err)
+			return ErrBool(err)
 		}
 		WithRows(rows, cb, cells...)
-		return NoneError()
+		return OkBool(true)
 	}
 
 	return f

@@ -1,4 +1,4 @@
-package main
+package main 
 
 const StyleSheet = `
 
@@ -56,7 +56,126 @@ table {
 
 body {
     font-family: sans-serif;
-    font-size: 100%;
+    width: 90%;
+    margin: auto;
+    position: relative;
+}
+@media screen and (max-width: 48em) {
+    body {
+        /* font-size:132%; */
+}
+}
+
+body div.header {
+    margin: 1em auto 1em auto;
+    padding-bottom: 1em;
+    border-bottom: 0.5px solid black;
+}
+
+body > div.header > h1.title {
+        font-size: 140%;
+    font-weight: bold;
+}
+
+body > div.header > div.bc-block {
+        position: absolute;
+    top: 0;
+    right: 0;
+}
+
+body > div.header > div.bc-block > div.bc {
+    font-size: 80%;
+    /* font-family: monospace;
+    font-weight: bold; */
+}
+
+a.link {
+    color: #c7002e;
+    font-family: monospace;
+    font-weight: bold;
+}
+
+body > div.message-block {
+    position: relative;
+}
+
+body > div.message-block > div.message-header {
+    margin-bottom: 1em;
+    padding-bottom: 1em;
+    border-bottom: 0.5px solid black;
+}
+
+body > div.message-block > div.message-header > span.message-sender {
+    font-style: italic;
+    font-size: 90%;
+}
+
+body > div.message-block > div.message-header > a {
+    font-size: 80%;
+    position: absolute;
+    right: 0;
+    margin-top: 0.2em;
+}
+
+body > div.message-block > div.message-body {
+    padding: 16px;
+}
+
+body > div.message-block > div.message-header > div.parent {
+    position: absolute;
+    top: -1em;
+}
+p.paragraph {
+    padding-bottom: 1em;
+}
+
+img {
+    max-width:100%;
+}
+
+body > div.answer {
+border: 0.5px solid gray;
+    padding: 1em;
+}
+
+div.answer-block > div.answer-header-block {
+   position: relative;
+    border-bottom: 0.5px solid gray;
+    padding-bottom: 0.5em;
+    margin-bottom: 0.5em;
+}
+
+div.answer-header-block > a.answer-link {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+div.answer.depth-2 { margin-left: 1em; }
+div.answer.depth-3 { margin-left: 2em; }
+div.answer.depth-4 { margin-left: 3em; }
+div.answer.depth-5 { margin-left: 4em; }
+div.answer.depth-6 { margin-left: 5em; }
+div.answer.depth-7 { margin-left: 6em; }
+div.answer.depth-8 { margin-left: 7em; }
+
+
+.topic {
+    margin-bottom: 1em;
+    font-size: 120%;
+}
+.topic-count{
+    font-size: 69%;
+    font-style: italic;
+}
+
+.message-item {
+        margin-bottom: .5em;
+}
+
+.message-item-sender {
+    font-size: 69%;
+    font-style: italic;
 }
 
 ` // end of stylesheet

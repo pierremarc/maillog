@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo"
 )
@@ -60,12 +62,20 @@ func (s serPart) FileName() string {
 }
 
 func (s serPart) MainType() string {
-	ctParts := strings.Split(s.contentType, "/")
+	mediaType, _, err := mime.ParseMediaType(s.contentType)
+	if err != nil {
+		return "any"
+	}
+	ctParts := strings.Split(mediaType, "/")
 	return ctParts[0]
 }
 
 func (s serPart) SubType() string {
-	ctParts := strings.Split(s.contentType, "/")
+	mediaType, _, err := mime.ParseMediaType(s.contentType)
+	if err != nil {
+		return "any"
+	}
+	ctParts := strings.Split(mediaType, "/")
 	return ctParts[1]
 }
 
@@ -123,12 +133,12 @@ func walkParts(r io.Reader, boundary string, c chan SerializedPart, depth int) {
 
 func formatMultipart(id int, msg *mail.Message, params map[string]string) Node {
 	log.Printf("formatMultipart %v", id)
-	node := Div(NewAttr())
+	node := Div(ClassAttr("message"))
 	mc := make(chan SerializedPart)
 	boundary := params["boundary"]
 	go walkParts(msg.Body, boundary, mc, 0)
 
-	parAttrs := NewAttr()
+	parAttrs := ClassAttr("paragraph")
 	for {
 		part := <-mc
 		if part == nil {
@@ -136,7 +146,7 @@ func formatMultipart(id int, msg *mail.Message, params map[string]string) Node {
 		}
 		switch mp := part.MainType(); mp {
 		case "text":
-			if true {
+			if "plain" == part.SubType() {
 				ps := strings.Split(part.ContentString(), "\n")
 				for _, p := range ps {
 					node.Append(P(parAttrs, Text(p)))
@@ -148,10 +158,10 @@ func formatMultipart(id int, msg *mail.Message, params map[string]string) Node {
 				url := fmt.Sprintf("/attachment/%v/%s", id, fn)
 				if "image" == mp {
 					node.Append(
-						A(NewAttr().Add("href", url).Add("title", fn),
-							Img(NewAttr().Add("src", url))))
+						A(ClassAttr("attachment image").Set("href", url).Set("title", fn),
+							Img(ClassAttr("").Set("src", url))))
 				} else {
-					node.Append(A(NewAttr().Add("href", url), Text(fn)))
+					node.Append(A(ClassAttr("attachment link").Set("href", url), Text(fn)))
 				}
 			}
 		}
@@ -198,37 +208,52 @@ func isMultipart(mediaType string) bool {
 	return false
 }
 
-func formatMessage(topic string, id int, data string) (string, Node) {
+type MessageInfo struct {
+	subject string
+	t       time.Time
+}
+
+func messageInfoError(err error) MessageInfo {
+	return MessageInfo{
+		err.Error(),
+		time.Now(),
+	}
+}
+
+func formatMessage(topic string, id int, data string) (MessageInfo, Node) {
 	log.Printf("formatMessage %v", id)
 	messageReader := strings.NewReader(data)
 	msg, err := mail.ReadMessage(messageReader)
 	if err != nil {
-		return "Server Error", Pre(NewAttr(), Text(err.Error()))
+		return messageInfoError(err), Pre(ClassAttr("error"), Text(err.Error()))
 	}
 
 	cte := msg.Header.Get(HeaderContentTranferEncoding)
 	body, err := ioutil.ReadAll(msg.Body)
 	if err != nil {
-		return "Server Error", Pre(NewAttr(), Text(err.Error()))
+		return messageInfoError(err), Pre(ClassAttr("error"), Text(err.Error()))
 	}
 
-	subject := msg.Header.Get("Subject")
+	info := MessageInfo{
+		msg.Header.Get("Subject"),
+		OptionTimeFrom(msg.Header.Date()).FoldTime(time.Now(), IdTime),
+	}
 	mediatype, params, err := mime.ParseMediaType(msg.Header.Get(echo.HeaderContentType))
 
-	plain := func() (string, Node) {
-		return subject, Text(string(decodeContent(body, cte)))
+	plain := func() (MessageInfo, Node) {
+		return info, Text(string(decodeContent(body, cte)))
 	}
 
 	if err != nil {
 		if "" == mediatype {
 			return plain()
 		}
-		return "Message Parsing Error", Pre(NewAttr(), Text(err.Error()))
+		return messageInfoError(err), Pre(ClassAttr("error"), Text(err.Error()))
 	}
 
 	if isMultipart(mediatype) {
 		messageReader.Seek(0, 0)
-		return subject, formatMultipart(id, msg, params)
+		return info, formatMultipart(id, msg, params)
 	}
 	return plain()
 }
@@ -285,7 +310,7 @@ func getAttachment(name string, data string) attachment {
 }
 
 func link(href string, label string) Node {
-	return A(NewAttr().Add("href", href), Text(label))
+	return A(ClassAttr("link").Set("href", href), Text(label))
 }
 
 func link0(href string) Node {
@@ -293,18 +318,28 @@ func link0(href string) Node {
 }
 
 func header(title string, args ...string) Node {
-	r := Div(NewAttr())
-	bc := Div(NewAttr().Add("class", "bc"), link("/", "root"))
+	r := Div(ClassAttr("header"))
+	bc := Div(ClassAttr("bc"), link("/", "root"))
 	u := ""
 	for i := 0; i < len(args); i++ {
 		u += "/" + args[i]
 		bc.Append(link(u, args[i]))
 	}
 	r.Append(
-		H1(NewAttr(), Text(title)),
-		Div(NewAttr(), bc))
+		H1(ClassAttr("title"), Text(title)),
+		Div(ClassAttr("bc-block"), bc))
 
 	return r
+}
+
+func makeDocument() document {
+	doc := NewDoc()
+	doc.head.Append(HeadMeta(NewAttr().Set("charset", "utf-8")))
+	doc.head.Append(HeadMeta(NewAttr().
+		Set("name", "viewport").
+		Set("content", "width=device-width, initial-scale=1.0")))
+	doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
+	return doc
 }
 
 func listTopics(app *echo.Echo, store Store, cont chan string) {
@@ -312,64 +347,80 @@ func listTopics(app *echo.Echo, store Store, cont chan string) {
 		`SELECT DISTINCT(topic) topic, count(id) FROM {{.RawMails}} GROUP BY topic;`)
 
 	app.GET("/", func(c echo.Context) error {
-		var doc = NewDoc()
+		var doc = makeDocument()
 		q := store.QueryFunc("mail/topic-list")
 		var (
 			topic string
 			count int
 		)
 
-		doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
 		doc.body.Append(header("Topics"))
-		attrs := NewAttr().Add("class", "item")
+		attrs := ClassAttr("topic")
 
 		return q(RowCallback(func() {
 			doc.body.Append(Div(attrs,
-				A(NewAttr().Add("href", "/"+topic),
+				A(ClassAttr("topic-link link").Set("href", "/"+topic),
 					Text(topic)),
-				Textf(" (%v)", count)))
+				Span(ClassAttr("topic-count"), Textf(" %v", count))))
 		}), &topic, &count).
 			FoldErrorF(
-				func() error {
-					return c.HTML(http.StatusOK, doc.Render())
-				},
 				func(err error) error {
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+				},
+				func(b bool) error {
+					return c.HTML(http.StatusOK, doc.Render())
 				})
 	})
 }
 
+const NoSubject = "***"
+
+func ensureSubject(s string) string {
+	ts := strings.Trim(s, " ")
+	if 0 == len(ts) {
+		return NoSubject
+	}
+	return ts
+}
+
 func listInTopics(app *echo.Echo, store Store, cont chan string) {
 	store.Register("mail/topic-messages",
-		`SELECT id, sender, subject FROM {{.RawMails}} WHERE topic = $1;`)
+		`SELECT r.id, r.sender, r.subject, a.parent 
+		FROM {{.RawMails}} r
+			LEFT JOIN {{.Answers}} a ON r.id = a.child 
+		WHERE topic = $1;`)
 
 	handler := func(c echo.Context) error {
 		paramTopic := c.Param("topic")
 		q := store.QueryFunc("mail/topic-messages", paramTopic)
-		var doc = NewDoc()
+		var doc = makeDocument()
 		var (
 			id      int
 			sender  string
 			subject string
+			parent  sql.NullInt64
 		)
-		doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
+
 		doc.body.Append(header(paramTopic, paramTopic))
-		attrs := NewAttr().Add("class", "item")
+		attrs := ClassAttr("message-item")
 
 		return q(RowCallback(func() {
+			if parent.Valid {
+				return
+			}
 			url := fmt.Sprintf("/%s/%v", paramTopic, id)
-			s := strings.Split(sender, "@")[0]
+
 			doc.body.Append(Div(attrs,
-				A(NewAttr().Add("href", url),
-					Text(subject)),
-				Textf(" by %s", s)))
-		}), &id, &sender, &subject).
+				A(ClassAttr("message-link link").Set("href", url),
+					Text(ensureSubject(subject))),
+				Span(ClassAttr("message-item-sender"), Text(senderName(sender)))))
+		}), &id, &sender, &subject, &parent).
 			FoldErrorF(
-				func() error {
-					return c.HTML(http.StatusOK, doc.Render())
-				},
 				func(err error) error {
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+				},
+				func(b bool) error {
+					return c.HTML(http.StatusOK, doc.Render())
 				})
 	}
 
@@ -386,66 +437,86 @@ func formatAnswers(topic string, pid string, store Store, c echo.Context, depth 
 		message string
 	)
 
-	root := Div(NewAttr().Add("class", fmt.Sprintf("answer depth-%v", depth)))
+	root := Div(ClassAttr(fmt.Sprintf("answer depth-%v", depth)))
 
 	return store.QueryFunc(queryAnswers, pid)(RowCallback(func() {
-		subject, msgNode := formatMessage(topic, id, message)
-		block := Div(NewAttr(),
-			Div(NewAttr(),
-				H2(NewAttr(), Text(subject)),
-				A(NewAttr().
-					Add("href", fmt.Sprintf("mailto:%s+%v@%s", topic, id, c.Request().Host)),
+		info, msgNode := formatMessage(topic, id, message)
+		block := Div(ClassAttr("answer-block"),
+			Div(ClassAttr("answer-header-block"),
+				H2(ClassAttr("answer-subject"),
+					A(ClassAttr("link").
+						Set("href", fmt.Sprintf("/%s/%v", topic, id)),
+						Text(info.subject))),
+				A(ClassAttr("answer-link").
+					Set("href", fmt.Sprintf("mailto:%s+%v@%s", topic, id, c.Request().Host)),
 					Text("answer"))),
-			Div(NewAttr(), msgNode))
+			Div(ClassAttr("answer-body"), msgNode))
 		root.Append(block, formatAnswers(topic, strconv.Itoa(id), store, c, depth+1))
 	}), &id, &sender, &message).
-		FoldNode(root,
-			func(err error) Node {
-				return Text(err.Error())
-			})
+		FoldNodeF(
+			func(err error) Node { return Text(err.Error()) },
+			func(_ bool) Node { return root })
+}
+
+func senderName(sender string) string {
+	return strings.Split(sender, "@")[0]
 }
 
 func showMessage(app *echo.Echo, store Store, cont chan string) {
 	store.Register(queryMessage,
-		`SELECT id, sender, message FROM {{.RawMails}} WHERE id = $1;`)
+		`SELECT  r.id, r.sender, r.message, a.parent 
+		FROM {{.RawMails}} r 
+			LEFT JOIN {{.Answers}} a ON r.id = a.child  
+		WHERE r.id = $1;`)
 
 	store.Register(queryAnswers,
 		`SELECT r.id as id, r.sender as sender, r.message as message 
 		FROM {{.RawMails}} r 
-		LEFT Join {{.Answers}} a ON r.id = a.child
+			LEFT Join {{.Answers}} a ON r.id = a.child
 		WHERE a.parent = $1;`)
 
 	handler := func(c echo.Context) error {
 		paramId := c.Param("id")
 		paramTopic := c.Param("topic")
 		q := store.QueryFunc(queryMessage, paramId)
-		var doc = NewDoc()
+		var doc = makeDocument()
 		var (
 			id      int
 			sender  string
 			message string
+			parent  sql.NullInt64
 		)
 
-		doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
-
 		return q(RowCallback(func() {
-			subject, msgNode := formatMessage(paramTopic, id, message)
-			block := Div(NewAttr(),
-				Div(NewAttr(),
-					A(NewAttr().
-						Add("href", fmt.Sprintf("mailto:%s+%v@%s", paramTopic, id, c.Request().Host)),
+			info, msgNode := formatMessage(paramTopic, id, message)
+			pnode := NoDisplay
+			if parent.Valid {
+				pnode = Div(ClassAttr("parent"),
+					A(ClassAttr("link").
+						Set("href", fmt.Sprintf("/%s/%v", paramTopic, parent.Int64)),
+						Text("parent")))
+			}
+
+			block := Div(ClassAttr("message-block"),
+				Div(ClassAttr("message-header"),
+					Span(ClassAttr("message-sender"),
+						Text(fmt.Sprintf("%s - %s", senderName(sender), info.t))),
+					pnode,
+					A(ClassAttr("link").
+						Set("href", fmt.Sprintf("mailto:%s+%v@%s", paramTopic, id, c.Request().Host)),
 						Text("answer"))),
-				Div(NewAttr(), msgNode))
+				Div(ClassAttr("message-body"), msgNode))
+
 			doc.body.Append(
-				header(subject, paramTopic, paramId),
+				header(info.subject, paramTopic, paramId),
 				block, formatAnswers(paramTopic, paramId, store, c, 1))
-		}), &id, &sender, &message).
+		}), &id, &sender, &message, &parent).
 			FoldErrorF(
-				func() error {
-					return c.HTML(http.StatusOK, doc.Render())
-				},
 				func(err error) error {
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+				},
+				func(bool) error {
+					return c.HTML(http.StatusOK, doc.Render())
 				})
 
 	}

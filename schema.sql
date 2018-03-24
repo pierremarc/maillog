@@ -1,4 +1,3 @@
-DROP TABLE public.raw_emails;
 CREATE TABLE public.raw_emails
 (
   id serial,
@@ -9,10 +8,9 @@ CREATE TABLE public.raw_emails
 );
 
 
-DROP TABLE public.answers;
 CREATE TABLE public.answers
 (
   id serial,
   parent int,
-  child int,
+  child int
 );
