@@ -12,6 +12,7 @@ import (
 	"mime/quotedprintable"
 	"net/http"
 	"net/mail"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo"
@@ -147,8 +148,8 @@ func formatMultipart(id int, msg *mail.Message, params map[string]string) Node {
 				url := fmt.Sprintf("/attachment/%v/%s", id, fn)
 				if "image" == mp {
 					node.Append(
-						A(NewAttr().Add("href", url).Add("title", fn)),
-						Img(NewAttr().Add("src", url)))
+						A(NewAttr().Add("href", url).Add("title", fn),
+							Img(NewAttr().Add("src", url))))
 				} else {
 					node.Append(A(NewAttr().Add("href", url), Text(fn)))
 				}
@@ -197,7 +198,7 @@ func isMultipart(mediaType string) bool {
 	return false
 }
 
-func formatMessage(id int, data string) (string, Node) {
+func formatMessage(topic string, id int, data string) (string, Node) {
 	log.Printf("formatMessage %v", id)
 	messageReader := strings.NewReader(data)
 	msg, err := mail.ReadMessage(messageReader)
@@ -213,9 +214,14 @@ func formatMessage(id int, data string) (string, Node) {
 
 	subject := msg.Header.Get("Subject")
 	mediatype, params, err := mime.ParseMediaType(msg.Header.Get(echo.HeaderContentType))
+
+	plain := func() (string, Node) {
+		return subject, Text(string(decodeContent(body, cte)))
+	}
+
 	if err != nil {
 		if "" == mediatype {
-			return subject, Text(string(decodeContent(body, cte)))
+			return plain()
 		}
 		return "Message Parsing Error", Pre(NewAttr(), Text(err.Error()))
 	}
@@ -224,8 +230,7 @@ func formatMessage(id int, data string) (string, Node) {
 		messageReader.Seek(0, 0)
 		return subject, formatMultipart(id, msg, params)
 	}
-	return subject, Text(string(decodeContent(body, cte)))
-
+	return plain()
 }
 
 func sReader(s ...string) io.Reader {
@@ -314,20 +319,23 @@ func listTopics(app *echo.Echo, store Store, cont chan string) {
 			count int
 		)
 
+		doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
 		doc.body.Append(header("Topics"))
 		attrs := NewAttr().Add("class", "item")
 
-		_, err := q(RowCallback(func() {
+		return q(RowCallback(func() {
 			doc.body.Append(Div(attrs,
 				A(NewAttr().Add("href", "/"+topic),
 					Text(topic)),
 				Textf(" (%v)", count)))
-		}), &topic, &count)
-
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.HTML(http.StatusOK, doc.Render())
+		}), &topic, &count).
+			FoldErrorF(
+				func() error {
+					return c.HTML(http.StatusOK, doc.Render())
+				},
+				func(err error) error {
+					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+				})
 	})
 }
 
@@ -344,34 +352,73 @@ func listInTopics(app *echo.Echo, store Store, cont chan string) {
 			sender  string
 			subject string
 		)
+		doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
 		doc.body.Append(header(paramTopic, paramTopic))
 		attrs := NewAttr().Add("class", "item")
 
-		_, err := q(RowCallback(func() {
+		return q(RowCallback(func() {
 			url := fmt.Sprintf("/%s/%v", paramTopic, id)
+			s := strings.Split(sender, "@")[0]
 			doc.body.Append(Div(attrs,
 				A(NewAttr().Add("href", url),
 					Text(subject)),
-				Textf(" by %s", sender)))
-		}), &id, &sender, &subject)
-
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.HTML(http.StatusOK, doc.Render())
+				Textf(" by %s", s)))
+		}), &id, &sender, &subject).
+			FoldErrorF(
+				func() error {
+					return c.HTML(http.StatusOK, doc.Render())
+				},
+				func(err error) error {
+					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+				})
 	}
 
 	app.GET("/:topic", handler)
 }
 
+const queryMessage = "mail/get-message"
+const queryAnswers = "mail/get-answers"
+
+func formatAnswers(topic string, pid string, store Store, c echo.Context, depth int) Node {
+	var (
+		id      int
+		sender  string
+		message string
+	)
+
+	root := Div(NewAttr().Add("class", fmt.Sprintf("answer depth-%v", depth)))
+
+	return store.QueryFunc(queryAnswers, pid)(RowCallback(func() {
+		subject, msgNode := formatMessage(topic, id, message)
+		block := Div(NewAttr(),
+			Div(NewAttr(),
+				H2(NewAttr(), Text(subject)),
+				A(NewAttr().
+					Add("href", fmt.Sprintf("mailto:%s+%v@%s", topic, id, c.Request().Host)),
+					Text("answer"))),
+			Div(NewAttr(), msgNode))
+		root.Append(block, formatAnswers(topic, strconv.Itoa(id), store, c, depth+1))
+	}), &id, &sender, &message).
+		FoldNode(root,
+			func(err error) Node {
+				return Text(err.Error())
+			})
+}
+
 func showMessage(app *echo.Echo, store Store, cont chan string) {
-	store.Register("mail/get-message",
+	store.Register(queryMessage,
 		`SELECT id, sender, message FROM {{.RawMails}} WHERE id = $1;`)
+
+	store.Register(queryAnswers,
+		`SELECT r.id as id, r.sender as sender, r.message as message 
+		FROM {{.RawMails}} r 
+		LEFT Join {{.Answers}} a ON r.id = a.child
+		WHERE a.parent = $1;`)
 
 	handler := func(c echo.Context) error {
 		paramId := c.Param("id")
 		paramTopic := c.Param("topic")
-		q := store.QueryFunc("mail/get-message", paramId)
+		q := store.QueryFunc(queryMessage, paramId)
 		var doc = NewDoc()
 		var (
 			id      int
@@ -379,17 +426,28 @@ func showMessage(app *echo.Echo, store Store, cont chan string) {
 			message string
 		)
 
-		_, err := q(RowCallback(func() {
-			subject, msgNode := formatMessage(id, message)
+		doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
+
+		return q(RowCallback(func() {
+			subject, msgNode := formatMessage(paramTopic, id, message)
+			block := Div(NewAttr(),
+				Div(NewAttr(),
+					A(NewAttr().
+						Add("href", fmt.Sprintf("mailto:%s+%v@%s", paramTopic, id, c.Request().Host)),
+						Text("answer"))),
+				Div(NewAttr(), msgNode))
 			doc.body.Append(
 				header(subject, paramTopic, paramId),
-				msgNode)
-		}), &id, &sender, &message)
+				block, formatAnswers(paramTopic, paramId, store, c, 1))
+		}), &id, &sender, &message).
+			FoldErrorF(
+				func() error {
+					return c.HTML(http.StatusOK, doc.Render())
+				},
+				func(err error) error {
+					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+				})
 
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		return c.HTML(http.StatusOK, doc.Render())
 	}
 
 	app.GET("/:topic/:id", handler)

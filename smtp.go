@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,17 +28,24 @@ func makeError(reason string) ErrorT {
 	}
 }
 
-func getRecipent(to []string) (string, error) {
+func getRecipent(to []string) OptionString {
 	if len(to) > 0 {
 		addr := to[0]
 		parts := strings.Split(addr, "@")
-		return parts[0], nil
+		return SomeString(parts[0])
 	}
-	return "", makeError("Empty recipients list")
+	return NoneString()
 }
 
-func withAnswer(topic string) (string, string) {
-	return "", nil
+func getAnswer(topic string) OptionUint64 {
+	parts := strings.Split(topic, "+")
+	if len(parts) > 1 {
+		i, err := strconv.ParseUint(parts[1], 10, 32)
+		if err == nil {
+			return SomeUint64(i)
+		}
+	}
+	return NoneUint64()
 }
 
 func makeHandler(cont chan string, store Store) smtpd.Handler {
@@ -53,20 +61,31 @@ func makeHandler(cont chan string, store Store) smtpd.Handler {
 
 	return func(origin net.Addr, from string, to []string, data []byte) {
 
-		recipient, err := getRecipent(to)
-		if err != nil {
-			cont <- err.Error()
-			return
+		fail := func() string {
+			return "Failed to parse a recipient"
 		}
 
-		msg, _ := mail.ReadMessage(bytes.NewReader(data))
-		subject := msg.Header.Get("Subject")
-		cont <- fmt.Sprintf("Received mail from %s for %s with subject %s", from, recipient, subject)
+		success := func(recipient string) string {
+			msg, _ := mail.ReadMessage(bytes.NewReader(data))
+			subject := msg.Header.Get("Subject")
+			var id int
 
-		rows, err = store.Query("mail/log", from, recipient, subject, data)
-		if err != nil {
-			cont <- err.Error()
+			getAnswer(recipient).FoldF(
+				func() {
+					store.QueryFunc("mail/log", from, recipient, subject, data).Exec()
+				},
+				func(parentId uint64) {
+					r := strings.Split(recipient, "+")[0]
+					q := store.QueryFunc("mail/log", from, r, subject, data)
+					q(RowCallback(func() {
+						store.QueryFunc("mail/answer", parentId, id).Exec()
+					}), &id)
+				})
+
+			return fmt.Sprintf("Received mail from %s for %s with subject %s", from, recipient, subject)
 		}
+
+		cont <- getRecipent(to).FoldStringF(fail, success)
 	}
 }
 

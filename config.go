@@ -16,6 +16,7 @@ type DbConfig struct {
 
 type Tables struct {
 	RawMails string
+	Answers  string
 }
 
 type Config interface {
@@ -30,6 +31,7 @@ type config struct {
 	Password string `json:password`
 
 	RawMails string `rawmails`
+	Answers  string `answers`
 }
 
 func (c config) Db() DbConfig {
@@ -43,6 +45,7 @@ func (c config) Db() DbConfig {
 func (c config) Tables() Tables {
 	return Tables{
 		RawMails: c.RawMails,
+		Answers:  c.Answers,
 	}
 }
 

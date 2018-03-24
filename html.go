@@ -111,15 +111,17 @@ func factory(tag string) factoryFunc {
 }
 
 var (
-	Div  = factory("DIV")
-	P    = factory("P")
-	Span = factory("SPAN")
-	H1   = factory("H1")
-	H2   = factory("H2")
-	H3   = factory("H3")
-	A    = factory("A")
-	Pre  = factory("PRE")
-	Img  = factory("IMG")
+	Div      = factory("DIV")
+	P        = factory("P")
+	Span     = factory("SPAN")
+	H1       = factory("H1")
+	H2       = factory("H2")
+	H3       = factory("H3")
+	A        = factory("A")
+	Pre      = factory("PRE")
+	Img      = factory("IMG")
+	Style    = factory("STYLE")
+	HeadLink = factory("LINK")
 )
 
 func Text(content string) Node {

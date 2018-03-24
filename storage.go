@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 
@@ -31,28 +32,29 @@ var namedQueries = map[string]string{}
 
 var cachedQueriers = map[string]Querier{}
 
-func noopQ(name string) Querier {
+func noopQ(name string, err string) Querier {
 	return func(args ...interface{}) (*sql.Rows, error) {
-		return nil, errors.New("Query Does Not Exist: " + name)
+		return nil, errors.New(fmt.Sprintf("Noop(%s): %s", name, err))
 	}
 }
 
 func (c Tables) makeQ(db *sql.DB, name string) Querier {
 	qs, ok := namedQueries[name]
+	log.Printf("Tables.makeQ %s %v", name, ok)
 	if ok == false {
-		return noopQ(name)
+		return noopQ(name, "Not in namedQueries table")
 	}
 
 	var builder strings.Builder
 	queryTemplate := template.New(name)
 	parsed, err := queryTemplate.Parse(qs)
 	if err != nil {
-		return noopQ(name)
+		return noopQ(name, err.Error())
 	}
 
 	err = parsed.Execute(&builder, c)
 	if err != nil {
-		return noopQ(name)
+		return noopQ(name, err.Error())
 	}
 
 	qs = builder.String()
@@ -83,21 +85,27 @@ func (store Store) Query(name string, args ...interface{}) (*sql.Rows, error) {
 }
 
 func (store Store) Register(name string, qs string) {
+	log.Printf("Store.Register %s", name)
 	namedQueriesMut.Lock()
 	namedQueries[name] = qs
 	namedQueriesMut.Unlock()
+	log.Printf("Register Success %s", name)
 }
 
-type queryFunc func(cb rowsCb, cells ...interface{}) (int, error)
+type queryFunc func(cb rowsCb, cells ...interface{}) OptionError
+
+func (qf queryFunc) Exec() {
+	qf(RowCallback(func() {}))
+}
 
 func (store Store) QueryFunc(name string, args ...interface{}) queryFunc {
-	f := func(cb rowsCb, cells ...interface{}) (int, error) {
+	f := func(cb rowsCb, cells ...interface{}) OptionError {
 		rows, err := store.Query(name, args...)
 		if err != nil {
-			return 0, err
+			return SomeError(err)
 		}
 		WithRows(rows, cb, cells...)
-		return 1, nil
+		return NoneError()
 	}
 
 	return f
@@ -109,15 +117,19 @@ func connString(dbc DbConfig) string {
 
 func NewStore(dbc DbConfig, tables Tables) Store {
 	log.Println(connString(dbc))
-	db, err := sql.Open("postgres", connString(dbc))
-	if err != nil {
-		log.Fatal(err)
-	}
+	return ResultSqlDBFrom(sql.Open("postgres", connString(dbc))).
+		FoldStoreF(
+			func(err error) Store {
+				log.Fatal(err)
+				return Store{}
+			},
+			func(db *sql.DB) Store {
+				return Store{
+					Tables: tables,
+					Db:     db,
+				}
+			})
 
-	return Store{
-		Tables: tables,
-		Db:     db,
-	}
 }
 
 type rowsCb func(args ...interface{})

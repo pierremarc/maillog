@@ -9,3 +9,10 @@ CREATE TABLE public.raw_emails
 );
 
 
+DROP TABLE public.answers;
+CREATE TABLE public.answers
+(
+  id serial,
+  parent int,
+  child int,
+);
