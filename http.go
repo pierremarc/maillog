@@ -124,6 +124,7 @@ func walkParts(r io.Reader, boundary string, c chan SerializedPart, depth int) {
 			newBoundary := params["boundary"]
 			walkParts(part, newBoundary, c, depth+1)
 		}
+		part.Close()
 	}
 
 	if 0 == depth {
@@ -220,10 +221,9 @@ func messageInfoError(err error) MessageInfo {
 	}
 }
 
-func formatMessage(topic string, id int, data string) (MessageInfo, Node) {
+func formatMessage(topic string, id int, messageReader *bytes.Reader) (MessageInfo, Node) {
 	log.Printf("formatMessage %v", id)
-	messageReader := strings.NewReader(data)
-	msg, err := mail.ReadMessage(messageReader)
+	msg, err := mail.ReadMessage(io.Reader(messageReader))
 	if err != nil {
 		return messageInfoError(err), Pre(ClassAttr("error"), Text(err.Error()))
 	}
@@ -276,8 +276,9 @@ func errAttach(r io.Reader) attachment {
 	}
 }
 
-func getAttachment(name string, data string) attachment {
-	msg, err := mail.ReadMessage(strings.NewReader(data))
+func getAttachment(name string, data *[]byte) attachment {
+	reader := bytes.NewReader(*data)
+	msg, err := mail.ReadMessage(reader)
 	if err != nil {
 		return errAttach(sReader("Error Reading Message: ", err.Error()))
 	}
@@ -304,7 +305,6 @@ func getAttachment(name string, data string) attachment {
 				mediaType: part.ContentType(),
 			}
 		}
-
 	}
 
 }
@@ -434,13 +434,14 @@ func formatAnswers(topic string, pid string, store Store, c echo.Context, depth 
 	var (
 		id      int
 		sender  string
-		message string
+		message sql.RawBytes
 	)
 
 	root := Div(ClassAttr(fmt.Sprintf("answer depth-%v", depth)))
 
 	return store.QueryFunc(queryAnswers, pid)(RowCallback(func() {
-		info, msgNode := formatMessage(topic, id, message)
+		msgReader := bytes.NewReader(message)
+		info, msgNode := formatMessage(topic, id, msgReader)
 		block := Div(ClassAttr("answer-block"),
 			Div(ClassAttr("answer-header-block"),
 				H2(ClassAttr("answer-subject"),
@@ -483,12 +484,15 @@ func showMessage(app *echo.Echo, store Store, cont chan string) {
 		var (
 			id      int
 			sender  string
-			message string
+			message sql.RawBytes
 			parent  sql.NullInt64
 		)
 
+		defer func() { message = []byte{} }()
+
 		return q(RowCallback(func() {
-			info, msgNode := formatMessage(paramTopic, id, message)
+			msgReader := bytes.NewReader(message)
+			info, msgNode := formatMessage(paramTopic, id, msgReader)
 			pnode := NoDisplay
 			if parent.Valid {
 				pnode = Div(ClassAttr("parent"),
@@ -529,27 +533,35 @@ func showAttachment(app *echo.Echo, store Store, cont chan string) {
 	store.Register("mail/get-attachment",
 		`SELECT id,  message FROM {{.RawMails}} WHERE id = $1;`)
 	handler := func(c echo.Context) error {
-		id := c.Param("id")
+		paramId := c.Param("id")
 		name := c.Param("name")
-		rows, err := store.Query("mail/get-attachment", id)
+		log.Printf("showAttachment Query Start")
+		rows, err := store.Query("mail/get-attachment", paramId)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
+		log.Printf("showAttachment Query End")
+
+		var (
+			id      int
+			message []byte
+		)
+		defer func() { rows.Close() }()
+		defer func() { message = []byte{} }()
 
 		for rows.Next() {
-			var (
-				id      int
-				message string
-			)
+			log.Printf("showAttachment Row Start")
+
 			scanError := rows.Scan(&id, &message)
 			if scanError != nil {
 				errMesg := scanError.Error()
 				cont <- errMesg
-			} else {
-				a := getAttachment(name, message)
-				return c.Stream(http.StatusOK, a.mediaType, a.r)
+				break
 			}
+			a := getAttachment(name, &message)
+			return c.Stream(http.StatusOK, a.mediaType, a.r)
 		}
+
 		return c.String(http.StatusNotFound, name)
 	}
 	app.GET("/attachment/:id/:name", handler)

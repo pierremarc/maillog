@@ -6,6 +6,9 @@ package main
 import (
 	"flag"
 	"log"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 var configFile string
@@ -25,6 +28,10 @@ func controller(cont chan string) {
 	}
 }
 
+func profiler() {
+	log.Println(http.ListenAndServe("0.0.0.0:6060", nil))
+}
+
 func main() {
 	flag.Parse()
 	dbc := GetDbConfig(configFile)
@@ -33,5 +40,6 @@ func main() {
 	cont := make(chan string)
 	go StartSMTP(cont, smtpdI, store)
 	go StartHTTP(cont, httpdI, store)
+	// go profiler()
 	controller(cont)
 }

@@ -14,3 +14,13 @@ CREATE TABLE public.answers
   parent int,
   child int
 );
+
+
+CREATE TABLE public.raw_emails2
+(
+  id serial,
+  sender varchar(256),
+  topic varchar(256),
+  subject varchar(256),
+  message bytea
+);

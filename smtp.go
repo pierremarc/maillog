@@ -72,7 +72,7 @@ func makeHandler(cont chan string, store Store) smtpd.Handler {
 
 			getAnswer(recipient).FoldF(
 				func() {
-					store.QueryFunc("mail/log", from, recipient, subject, data).Exec()
+					store.QueryFunc("mail/log", from, recipient, subject, data).Exec(&id)
 				},
 				func(parentId uint64) {
 					r := strings.Split(recipient, "+")[0]
