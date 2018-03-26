@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"net"
 	"net/mail"
 	"strconv"
@@ -63,6 +64,22 @@ func makeHandler(cont chan string, store Store) smtpd.Handler {
 
 		fail := func() string {
 			return "Failed to parse a recipient"
+		}
+
+		sm := SerializeMessage(&data, "test-sender", "test-topic", 0)
+		smr := sm.Root()
+
+		c := smr.Walk()
+		for {
+			p := <-c
+			if p != nil {
+				if "text/plain" == p.ContentType() {
+					log.Printf("(text/plain) %s", p.ContentString())
+				} else {
+					log.Printf("(%s) ??", p.ContentType())
+				}
+			}
+			break
 		}
 
 		success := func(recipient string) string {

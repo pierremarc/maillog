@@ -3,134 +3,20 @@ package main
 import (
 	"bytes"
 	"database/sql"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"mime"
-	"mime/multipart"
-	"mime/quotedprintable"
 	"net/http"
 	"net/mail"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo"
 )
-
-const HeaderContentTranferEncoding = "Content-Transfer-Encoding"
-
-func mainContentType(p *multipart.Part) string {
-	ct := p.Header.Get("Content-Type")
-	ctParts := strings.Split(ct, "/")
-	return ctParts[0]
-}
-
-type SerializedPart interface {
-	ContentType() string
-	ContentEncoding() string
-	Content() []byte
-	ContentString() string
-	FileName() string
-	MainType() string
-	SubType() string
-}
-
-type serPart struct {
-	contentType     string
-	contentEncoding string
-	content         []byte
-	filename        string
-}
-
-func (s serPart) ContentType() string {
-	return s.contentType
-}
-func (s serPart) ContentEncoding() string {
-	return s.contentEncoding
-}
-func (s serPart) Content() []byte {
-	return s.content
-}
-func (s serPart) ContentString() string {
-	return fmt.Sprintf("%s", decodeContent(s.content, s.contentEncoding))
-}
-func (s serPart) FileName() string {
-	return s.filename
-}
-
-func (s serPart) MainType() string {
-	mediaType, _, err := mime.ParseMediaType(s.contentType)
-	if err != nil {
-		return "any"
-	}
-	ctParts := strings.Split(mediaType, "/")
-	return ctParts[0]
-}
-
-func (s serPart) SubType() string {
-	mediaType, _, err := mime.ParseMediaType(s.contentType)
-	if err != nil {
-		return "any"
-	}
-	ctParts := strings.Split(mediaType, "/")
-	return ctParts[1]
-}
-
-func serPartF(p *multipart.Part) SerializedPart {
-	ct := p.Header.Get(echo.HeaderContentType)
-	cte := p.Header.Get(HeaderContentTranferEncoding)
-	fn := p.FileName()
-	log.Printf("serPartF %s %s", ct, fn)
-	input, err := ioutil.ReadAll(p)
-	if err != nil {
-		return nil
-	}
-
-	// content := decodeContent(input, cte)
-
-	return serPart{
-		contentType:     ct,
-		contentEncoding: cte,
-		content:         input,
-		filename:        fn,
-	}
-}
-
-func walkParts(r io.Reader, boundary string, c chan SerializedPart, depth int) {
-	log.Printf("walkParts %v", depth)
-	reader := multipart.NewReader(r, boundary)
-	counter := 0
-	for {
-		counter = counter + 1
-		part, err := reader.NextPart()
-		if err != nil {
-			log.Printf("Err on NextPart %s", err.Error())
-			break
-		}
-
-		contentType := part.Header.Get("Content-Type")
-		mediaType, params, err := mime.ParseMediaType(contentType)
-		if err != nil {
-			log.Printf("Err on ParseMediaType %s", err.Error())
-			break
-		}
-
-		if !isMultipart(mediaType) {
-			c <- serPartF(part)
-		} else {
-			newBoundary := params["boundary"]
-			walkParts(part, newBoundary, c, depth+1)
-		}
-		part.Close()
-	}
-
-	if 0 == depth {
-		c <- nil
-	}
-}
 
 func formatMultipart(id int, msg *mail.Message, params map[string]string) Node {
 	log.Printf("formatMultipart %v", id)
@@ -172,43 +58,6 @@ func formatMultipart(id int, msg *mail.Message, params map[string]string) Node {
 	return node
 }
 
-func decodeContent(input []byte, cte string) []byte {
-	log.Printf("decodeContent (%s)", cte)
-	switch cte {
-
-	case "base64":
-		{
-			content, err := base64.StdEncoding.DecodeString(string(input))
-			if err != nil {
-				return nil
-			}
-			return content
-		}
-
-	case "7bit":
-		{
-			r := quotedprintable.NewReader(bytes.NewReader(input))
-			content, err := ioutil.ReadAll(r)
-			if err != nil {
-				return nil
-			}
-			return content
-		}
-	}
-
-	return input
-}
-
-func isMultipart(mediaType string) bool {
-	const rfc822 = "message/rfc822"
-	const mp = "multipart"
-	mainType := strings.Split(mediaType, "/")[0]
-	if mediaType == rfc822 || mainType == mp {
-		return true
-	}
-	return false
-}
-
 type MessageInfo struct {
 	subject string
 	t       time.Time
@@ -241,7 +90,7 @@ func formatMessage(topic string, id int, messageReader *bytes.Reader) (MessageIn
 	mediatype, params, err := mime.ParseMediaType(msg.Header.Get(echo.HeaderContentType))
 
 	plain := func() (MessageInfo, Node) {
-		return info, Text(string(decodeContent(body, cte)))
+		return info, Text(string(decodeContent(&body, cte)))
 	}
 
 	if err != nil {
@@ -260,53 +109,6 @@ func formatMessage(topic string, id int, messageReader *bytes.Reader) (MessageIn
 
 func sReader(s ...string) io.Reader {
 	return strings.NewReader(strings.Join(s, ""))
-}
-
-type attachment struct {
-	r         io.Reader
-	name      string
-	mediaType string
-}
-
-func errAttach(r io.Reader) attachment {
-	return attachment{
-		r:         r,
-		name:      "Error.txt",
-		mediaType: "text/plain",
-	}
-}
-
-func getAttachment(name string, data *[]byte) attachment {
-	reader := bytes.NewReader(*data)
-	msg, err := mail.ReadMessage(reader)
-	if err != nil {
-		return errAttach(sReader("Error Reading Message: ", err.Error()))
-	}
-	_, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
-	if err != nil {
-		return errAttach(sReader("Error MediaType: ", err.Error()))
-	}
-	mc := make(chan SerializedPart)
-	boundary := params["boundary"]
-	go walkParts(msg.Body, boundary, mc, 0)
-
-	for {
-		part := <-mc
-		if part == nil {
-			return errAttach(sReader("Attachment Not Found ", name))
-		}
-		mp := part.MainType()
-		fn := part.FileName()
-		content := decodeContent(part.Content(), part.ContentEncoding())
-		if mp != "text" && fn == name {
-			return attachment{
-				r:         bytes.NewReader(content),
-				name:      fn,
-				mediaType: part.ContentType(),
-			}
-		}
-	}
-
 }
 
 func link(href string, label string) Node {
@@ -559,6 +361,10 @@ func showAttachment(app *echo.Echo, store Store, cont chan string) {
 				break
 			}
 			a := getAttachment(name, &message)
+			// var gcs debug.GCStats
+			// debug.ReadGCStats(&gcs)
+			// log.Printf("GC  *v", gcs)
+			debug.FreeOSMemory()
 			return c.Stream(http.StatusOK, a.mediaType, a.r)
 		}
 

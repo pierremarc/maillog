@@ -63,8 +63,8 @@ func (c Tables) makeQ(db *sql.DB, name string) Querier {
 	qs = builder.String()
 
 	return func(args ...interface{}) (*sql.Rows, error) {
-		queryMut.Lock()
-		defer queryMut.Unlock()
+		// queryMut.Lock()
+		// defer queryMut.Unlock()
 		return db.Query(qs, args...)
 	}
 }

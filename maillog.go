@@ -1,5 +1,5 @@
-//go:generate futil -type option -import time  String=string UInt64=uint64 Node=Node Time=time.Time Error=error
-//go:generate futil -type result -import database/sql Bool=bool Node=Node SqlDB=*sql.DB  Error=error Store=Store
+//go:generate futil -type option -import time  String=string UInt64=uint64 Node=Node Time=time.Time Error=error SerializedPart=SerializedPart
+//go:generate futil -type result -import database/sql -import net/mail Bool=bool Node=Node SqlDB=*sql.DB  Error=error Store=Store Message=*mail.Message SByte=[]byte
 //go:generate futil -type array   Int=int String=string
 package main
 
@@ -40,6 +40,6 @@ func main() {
 	cont := make(chan string)
 	go StartSMTP(cont, smtpdI, store)
 	go StartHTTP(cont, httpdI, store)
-	// go profiler()
+	go profiler()
 	controller(cont)
 }
