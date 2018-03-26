@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -10,38 +9,36 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/jackc/pgx"
 	// _ "github.com/lib/pq"
-	_ "github.com/jackc/pgx/stdlib"
 )
 
-type Querier func(args ...interface{}) (*sql.Rows, error)
+type Querier func(args ...interface{}) (*pgx.Rows, error)
 
-// func (qf Query) prepared(db *sql.DB, qs string) func(...interface{}) (*sql.Rows, error) {
-// 	return func(args ...interface{}) (*sql.Rows, error) {
+// func (qf Query) prepared(db *pgx.DB, qs string) func(...interface{}) (*pgx.Rows, error) {
+// 	return func(args ...interface{}) (*pgx.Rows, error) {
 // 		return db.Exec(qs, args)
 // 	}
 // }
 
-func qes(db *sql.DB, qs string) Querier {
-	return func(args ...interface{}) (*sql.Rows, error) {
-		return db.Query(qs, args)
-	}
-}
+// func qes(db *pgx.DB, qs string) Querier {
+// 	return func(args ...interface{}) (*pgx.Rows, error) {
+// 		return db.Query(qs, args)
+// 	}
+// }
 
 var namedQueriesMut sync.Mutex
 var namedQueries = map[string]string{}
 
-var queryMut sync.Mutex
-
 var cachedQueriers = map[string]Querier{}
 
 func noopQ(name string, err string) Querier {
-	return func(args ...interface{}) (*sql.Rows, error) {
+	return func(args ...interface{}) (*pgx.Rows, error) {
 		return nil, errors.New(fmt.Sprintf("Noop(%s): %s", name, err))
 	}
 }
 
-func (c Tables) makeQ(db *sql.DB, name string) Querier {
+func (c Tables) makeQ(pool *pgx.ConnPool, name string) Querier {
 	qs, ok := namedQueries[name]
 	log.Printf("Tables.makeQ %s %v", name, ok)
 	if ok == false {
@@ -62,17 +59,20 @@ func (c Tables) makeQ(db *sql.DB, name string) Querier {
 
 	qs = builder.String()
 
-	return func(args ...interface{}) (*sql.Rows, error) {
-		queryMut.Lock()
-		defer queryMut.Unlock()
-		return db.Query(qs, args...)
+	return func(args ...interface{}) (*pgx.Rows, error) {
+		conn, err := pool.Acquire()
+		if err != nil {
+			log.Println("Error acquiring connection:", err)
+		}
+		defer pool.Release(conn)
+		return pool.Query(qs, args...)
 	}
 }
 
-func (c Tables) q(db *sql.DB, name string) Querier {
+func (c Tables) q(pool *pgx.ConnPool, name string) Querier {
 	f, ok := cachedQueriers[name]
 	if ok == false {
-		f = c.makeQ(db, name)
+		f = c.makeQ(pool, name)
 		cachedQueriers[name] = f
 	}
 
@@ -81,12 +81,11 @@ func (c Tables) q(db *sql.DB, name string) Querier {
 
 type Store struct {
 	Tables Tables
-	Db     *sql.DB
-	pool   mxPool
+	pool   *pgx.ConnPool
 }
 
-func (store Store) Query(name string, args ...interface{}) (*sql.Rows, error) {
-	f := store.Tables.q(store.Db, name)
+func (store Store) Query(name string, args ...interface{}) (*pgx.Rows, error) {
+	f := store.Tables.q(store.pool, name)
 	// store.pool.Get()
 	// defer store.pool.Release()
 	return f(args...)
@@ -121,23 +120,31 @@ func (store Store) QueryFunc(name string, args ...interface{}) queryFunc {
 	return f
 }
 
-func connString(dbc DbConfig) string {
-	return "host=" + dbc.Host + " user=" + dbc.User + " dbname=" + dbc.Name + " password=" + dbc.Password
+func connString(dbc DbConfig) pgx.ConnConfig {
+	return pgx.ConnConfig{
+		Host:     dbc.Host,
+		User:     dbc.User,
+		Database: dbc.Name,
+		Password: dbc.Password,
+	}
 }
 
 func NewStore(dbc DbConfig, tables Tables) Store {
-	log.Println(connString(dbc))
-	return ResultSqlDBFrom(sql.Open("pgx", connString(dbc))).
+	config := pgx.ConnPoolConfig{
+		ConnConfig:     connString(dbc),
+		MaxConnections: 24,
+		AcquireTimeout: 30000000000,
+	}
+	return ResultConnPoolFrom(pgx.NewConnPool(config)).
 		FoldStoreF(
 			func(err error) Store {
 				log.Fatal(err)
 				return Store{}
 			},
-			func(db *sql.DB) Store {
+			func(pool *pgx.ConnPool) Store {
 				return Store{
 					Tables: tables,
-					Db:     db,
-					pool:   newMxPool(4),
+					pool:   pool,
 				}
 			})
 
@@ -145,38 +152,8 @@ func NewStore(dbc DbConfig, tables Tables) Store {
 
 type rowsCb func(args ...interface{})
 
-type mxChan chan int
-
-type mxPool struct {
-	c mxChan
-	n int
-}
-
-func newMxPool(n int) mxPool {
-	c := make(mxChan, n)
-	return mxPool{c, n}
-}
-
-func (p *mxPool) Get() int {
-	log.Println("pool.Get Wait for a free mx")
-	var c int
-	select {
-	case c = <-p.c:
-	default:
-		c = c + 1
-	}
-	return c
-}
-
-func (p *mxPool) Release() {
-	select {
-	case p.c <- 1:
-	default:
-		// let it go, let it go...
-	}
-}
-
-func WithRows(rows *sql.Rows, cb rowsCb, args ...interface{}) {
+func WithRows(rows *pgx.Rows, cb rowsCb, args ...interface{}) {
+	defer rows.Close()
 	for rows.Next() {
 		scanError := rows.Scan(args...)
 		if scanError != nil {
