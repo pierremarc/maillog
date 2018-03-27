@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net"
-	"net/mail"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +36,25 @@ func getRecipent(to []string) OptionString {
 	return NoneString()
 }
 
+func getDomain(to []string) OptionString {
+	if len(to) > 0 {
+		addr := to[0]
+		parts := strings.Split(addr, "@")
+		if len(parts) > 1 {
+			return SomeString(parts[1])
+		}
+	}
+	return NoneString()
+}
+
+func getTopic(recipient string) OptionString {
+	parts := strings.Split(recipient, "+")
+	if len(parts) > 0 {
+		return SomeString(parts[0])
+	}
+	return NoneString()
+}
+
 func getAnswer(topic string) OptionUInt64 {
 	parts := strings.Split(topic, "+")
 	if len(parts) > 1 {
@@ -49,16 +66,33 @@ func getAnswer(topic string) OptionUInt64 {
 	return NoneUInt64()
 }
 
-func makeHandler(cont chan string, store Store) smtpd.Handler {
+func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 
-	store.Register("mail/log",
-		`INSERT INTO {{.RawMails}} (sender, topic, subject, message)
-		VALUES ($1, $2, $3, $4)
+	// store.Register("mail/log",
+	// 	`INSERT INTO {{.RawMails}} (sender, topic, subject, message)
+	// 	VALUES ($1, $2, $3, $4)
+	// 	RETURNING id`)
+
+	// store.Register("mail/answer",
+	// 	`INSERT INTO {{.Answers}} (parent, child)
+	// 	VALUES ($1, $2)`)
+
+	store.Register("mail/recordp",
+		`INSERT INTO {{.Records}} 
+		(sender, recipient, topic, domain, header_date, header_subject, body, payload, parent)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id`)
 
-	store.Register("mail/answer",
-		`INSERT INTO {{.Answers}} (parent, child)
-		VALUES ($1, $2)`)
+	store.Register("mail/record",
+		`INSERT INTO {{.Records}} 
+		(sender, recipient, topic, domain, header_date, header_subject, body, payload)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id`)
+
+	store.Register("attachment/record",
+		`INSERT INTO {{.Attachments}}
+		(record_id, content_type, file_name)
+		VALUES ($1, $2, $3)`)
 
 	return func(origin net.Addr, from string, to []string, data []byte) {
 
@@ -66,48 +100,89 @@ func makeHandler(cont chan string, store Store) smtpd.Handler {
 			return "Failed to parse a recipient"
 		}
 
-		sm := SerializeMessage(&data, "test-sender", "test-topic", 0)
-		smr := sm.Root()
-
-		c := smr.Walk()
-		for {
-			p := <-c
-			if p != nil {
-				if "text/plain" == p.ContentType() {
-					log.Printf("(text/plain) %s", p.ContentString())
-				} else {
-					log.Printf("(%s) ??", p.ContentType())
-				}
-			}
-			break
-		}
-
 		success := func(recipient string) string {
-			msg, _ := mail.ReadMessage(bytes.NewReader(data))
-			subject := msg.Header.Get("Subject")
-			var id int
+			var (
+				id            int
+				sender        string
+				topic         string
+				domain        string
+				dateHeader    string
+				subjectHeader string
+				body          string
+				parent        int
+
+				queryName string
+			)
+
+			sender = from
+			domain = getDomain(to).FoldString("", IdString)
+			topic = getTopic(recipient).FoldString("na", IdString)
 
 			getAnswer(recipient).FoldF(
 				func() {
-					store.QueryFunc("mail/log", from, recipient, subject, data).Exec(&id)
+					log.Println("No Parent")
+					queryName = "mail/record"
+					parent = -1
 				},
-				func(parentId uint64) {
-					r := strings.Split(recipient, "+")[0]
-					q := store.QueryFunc("mail/log", from, r, subject, data)
-					q(RowCallback(func() {
-						store.QueryFunc("mail/answer", parentId, id).Exec()
-					}), &id)
+				func(i uint64) {
+					queryName = "mail/recordp"
+					parent = int(i)
+					log.Printf("Parent !!! %v", parent)
 				})
 
-			return fmt.Sprintf("Received mail from %s for %s with subject %s", from, recipient, subject)
+			return MakeSerializedMsg(&data).
+				MapString(func(sm SerializedMessage) string {
+					var attachments []SerializedPart
+					dateHeader = sm.Get("Date")
+					subjectHeader = sm.Get("Subject")
+
+					sm.Parse().
+						Root().
+						Walk(func(p SerializedPart) {
+							if p != nil {
+								if "text/plain" == p.ContentType() {
+									body += p.ContentString()
+								} else {
+									attachments = append(attachments, p)
+								}
+							}
+						})
+
+					qf := store.QueryFunc(queryName,
+						sender, recipient, topic, domain,
+						dateHeader, subjectHeader, body, data)
+
+					if parent >= 0 {
+						qf = store.QueryFunc(queryName,
+							sender, recipient, topic, domain,
+							dateHeader, subjectHeader, body, data, parent)
+					}
+
+					qf.Exec(&id).
+						FoldF(
+							func(err error) { log.Printf("Error:mail/record %s", err.Error()) },
+							func(r bool) { log.Printf("Recorded %d", id) })
+
+					for _, at := range attachments {
+						v.Write(WriteOptions{encodedSender(sender), topic, id, at.FileName(), at.DecodedContent()}).
+							Map(func(fn string) {
+								store.QueryFunc("attachment/record",
+									id, at.ContentType(), fn).Exec()
+							})
+					}
+
+					return fmt.Sprintf("Received [%s] => [%s]: %s",
+						from, recipient, subjectHeader)
+				}).
+				FoldString("Failed Processing Message", IdString)
 		}
 
 		cont <- getRecipent(to).FoldStringF(fail, success)
 	}
 }
 
-func StartSMTP(cont chan string, iface string, store Store) {
-	handler := makeHandler(cont, store)
+func StartSMTP(cont chan string, iface string, store Store, v Volume) {
+	handler := makeHandler(cont, store, v)
 	cont <- fmt.Sprintf("SMTPD ready on %s", iface)
 	smtpd.ListenAndServe(iface, handler, "MailLog", "Wow")
 }

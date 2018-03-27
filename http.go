@@ -1,115 +1,16 @@
 package main
 
 import (
-	"bytes"
-	"database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
-	"mime"
 	"net/http"
-	"net/mail"
-	"runtime/debug"
+	"path"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/jackc/pgx/pgtype"
 	"github.com/labstack/echo"
 )
-
-func formatMultipart(id int, msg *mail.Message, params map[string]string) Node {
-	log.Printf("formatMultipart %v", id)
-	node := Div(ClassAttr("message"))
-	mc := make(chan SerializedPart)
-	boundary := params["boundary"]
-	go walkParts(msg.Body, boundary, mc, 0)
-
-	parAttrs := ClassAttr("paragraph")
-	for {
-		part := <-mc
-		if part == nil {
-			break
-		}
-		switch mp := part.MainType(); mp {
-		case "text":
-			if "plain" == part.SubType() {
-				ps := strings.Split(part.ContentString(), "\n")
-				for _, p := range ps {
-					node.Append(P(parAttrs, Text(p)))
-				}
-			}
-		default:
-			{
-				fn := part.FileName()
-				url := fmt.Sprintf("/attachment/%v/%s", id, fn)
-				if "image" == mp {
-					node.Append(
-						A(ClassAttr("attachment image").Set("href", url).Set("title", fn),
-							Img(ClassAttr("").Set("src", url))))
-				} else {
-					node.Append(A(ClassAttr("attachment link").Set("href", url), Text(fn)))
-				}
-			}
-		}
-
-	}
-
-	return node
-}
-
-type MessageInfo struct {
-	subject string
-	t       time.Time
-}
-
-func messageInfoError(err error) MessageInfo {
-	return MessageInfo{
-		err.Error(),
-		time.Now(),
-	}
-}
-
-func formatMessage(topic string, id int, messageReader *bytes.Reader) (MessageInfo, Node) {
-	log.Printf("formatMessage %v", id)
-	msg, err := mail.ReadMessage(io.Reader(messageReader))
-	if err != nil {
-		return messageInfoError(err), Pre(ClassAttr("error"), Text(err.Error()))
-	}
-
-	cte := msg.Header.Get(HeaderContentTranferEncoding)
-	body, err := ioutil.ReadAll(msg.Body)
-	if err != nil {
-		return messageInfoError(err), Pre(ClassAttr("error"), Text(err.Error()))
-	}
-
-	info := MessageInfo{
-		msg.Header.Get("Subject"),
-		OptionTimeFrom(msg.Header.Date()).FoldTime(time.Now(), IdTime),
-	}
-	mediatype, params, err := mime.ParseMediaType(msg.Header.Get(echo.HeaderContentType))
-
-	plain := func() (MessageInfo, Node) {
-		return info, Text(string(decodeContent(&body, cte)))
-	}
-
-	if err != nil {
-		if "" == mediatype {
-			return plain()
-		}
-		return messageInfoError(err), Pre(ClassAttr("error"), Text(err.Error()))
-	}
-
-	if isMultipart(mediatype) {
-		messageReader.Seek(0, 0)
-		return info, formatMultipart(id, msg, params)
-	}
-	return plain()
-}
-
-func sReader(s ...string) io.Reader {
-	return strings.NewReader(strings.Join(s, ""))
-}
 
 func link(href string, label string) Node {
 	return A(ClassAttr("link").Set("href", href), Text(label))
@@ -144,9 +45,9 @@ func makeDocument() document {
 	return doc
 }
 
-func listTopics(app *echo.Echo, store Store, cont chan string) {
+func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register("mail/topic-list",
-		`SELECT DISTINCT(topic) topic, count(id) FROM {{.RawMails}} GROUP BY topic;`)
+		`SELECT DISTINCT(topic) topic, count(id) FROM {{.Records}} GROUP BY topic;`)
 
 	app.GET("/", func(c echo.Context) error {
 		var doc = makeDocument()
@@ -185,12 +86,11 @@ func ensureSubject(s string) string {
 	return ts
 }
 
-func listInTopics(app *echo.Echo, store Store, cont chan string) {
+func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register("mail/topic-messages",
-		`SELECT r.id, r.sender, r.subject, a.parent 
-		FROM {{.RawMails}} r
-			LEFT JOIN {{.Answers}} a ON r.id = a.child 
-		WHERE topic = $1;`)
+		`SELECT id, sender, header_subject
+		FROM {{.Records}}  
+		WHERE topic = $1 AND parent IS NULL;`)
 
 	handler := func(c echo.Context) error {
 		paramTopic := c.Param("topic")
@@ -200,23 +100,19 @@ func listInTopics(app *echo.Echo, store Store, cont chan string) {
 			id      int
 			sender  string
 			subject string
-			parent  sql.NullInt64
 		)
 
 		doc.body.Append(header(paramTopic, paramTopic))
 		attrs := ClassAttr("message-item")
 
 		return q(RowCallback(func() {
-			if parent.Valid {
-				return
-			}
 			url := fmt.Sprintf("/%s/%v", paramTopic, id)
 
 			doc.body.Append(Div(attrs,
 				A(ClassAttr("message-link link").Set("href", url),
 					Text(ensureSubject(subject))),
 				Span(ClassAttr("message-item-sender"), Text(senderName(sender)))))
-		}), &id, &sender, &subject, &parent).
+		}), &id, &sender, &subject).
 			FoldErrorF(
 				func(err error) error {
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -231,97 +127,188 @@ func listInTopics(app *echo.Echo, store Store, cont chan string) {
 
 const queryMessage = "mail/get-message"
 const queryAnswers = "mail/get-answers"
+const queryAnswersIds = "mail/get-answers-ids"
+const queryAttachments = "mail/get-attachments"
 
-func formatAnswers(topic string, pid string, store Store, c echo.Context, depth int) Node {
+func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	var (
-		id      int
-		sender  string
-		message sql.RawBytes
+		id          int
+		aids        []int
+		ts          pgtype.Timestamp
+		sender      string
+		topic       string
+		subject     string
+		body        string
+		parent      pgtype.Int4
+		contentType string
+		fileName    string
+		attachments []attachmentRecord
 	)
+
+	qi := store.QueryFunc(queryAnswersIds, pid)
+	qm := store.QueryFunc(queryAnswers, pid)
+
+	qi(RowCallback(func() {
+		aids = append(aids, id)
+	}), &id)
+
+	var nas = map[int]Node{}
+	for _, aid := range aids {
+		nas[aid] = Div(ClassAttr("attachment-block"))
+	}
 
 	root := Div(ClassAttr(fmt.Sprintf("answer depth-%v", depth)))
 
-	return store.QueryFunc(queryAnswers, pid)(RowCallback(func() {
-		msgReader := bytes.NewReader(message)
-		info, msgNode := formatMessage(topic, id, msgReader)
-		block := Div(ClassAttr("answer-block"),
+	return qm(RowCallback(func() {
+		block := Div(ClassAttr("answer-block"))
+		block.Append(
 			Div(ClassAttr("answer-header-block"),
 				H2(ClassAttr("answer-subject"),
 					A(ClassAttr("link").
 						Set("href", fmt.Sprintf("/%s/%v", topic, id)),
-						Text(info.subject))),
+						Text(subject))),
 				A(ClassAttr("answer-link").
 					Set("href", fmt.Sprintf("mailto:%s+%v@%s", topic, id, c.Request().Host)),
 					Text("answer"))),
-			Div(ClassAttr("answer-body"), msgNode))
-		root.Append(block, formatAnswers(topic, strconv.Itoa(id), store, c, depth+1))
-	}), &id, &sender, &message).
+			Div(ClassAttr("answer-body"), Text(body)), nas[id])
+		root.Append(block, formatAnswers(strconv.Itoa(id), store, c, depth+1))
+	}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 		FoldNodeF(
 			func(err error) Node { return Text(err.Error()) },
-			func(_ bool) Node { return root })
+			func(_ bool) Node {
+				for _, aid := range aids {
+					attBlock := nas[aid]
+					qa := store.QueryFunc(queryAttachments, aid)
+					qa(RowCallback(func() {
+						attachments = append(attachments, attachmentRecord{
+							sender: encodedSender(sender),
+							topic:  topic,
+							record: id,
+							ct:     contentType,
+							fn:     fileName,
+						})
+					}), &id, &contentType, &fileName)
+
+					attBlock.Append(formatAttachments(attachments))
+				}
+				return root
+			})
 }
 
 func senderName(sender string) string {
 	return strings.Split(sender, "@")[0]
 }
 
-func showMessage(app *echo.Echo, store Store, cont chan string) {
+type attachmentRecord struct {
+	sender string
+	topic  string
+	record int
+	ct     string
+	fn     string
+}
+
+func formatAttachments(rs []attachmentRecord) Node {
+	node := Div(ClassAttr("attachment-block"))
+
+	for _, r := range rs {
+		mt := strings.Split(r.ct, "/")[0]
+		url := fmt.Sprintf("/attachments/%s/%s/%d/%s", r.sender, r.topic, r.record, r.fn)
+		if "image" == mt {
+			node.Append(
+				A(ClassAttr("attachment image").Set("href", url).Set("title", r.fn),
+					Img(ClassAttr("").Set("src", url))))
+		} else {
+			node.Append(A(ClassAttr("attachment link").Set("href", url), Text(r.fn)))
+		}
+	}
+
+	return node
+}
+
+func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register(queryMessage,
-		`SELECT  r.id, r.sender, r.message, a.parent 
-		FROM {{.RawMails}} r 
-			LEFT JOIN {{.Answers}} a ON r.id = a.child  
-		WHERE r.id = $1;`)
+		`SELECT  id, ts, sender, topic, header_subject, body, parent 
+		FROM {{.Records}} 
+		WHERE id = $1;`)
 
 	store.Register(queryAnswers,
-		`SELECT r.id as id, r.sender as sender, r.message as message 
-		FROM {{.RawMails}} r 
-			LEFT Join {{.Answers}} a ON r.id = a.child
-		WHERE a.parent = $1;`)
+		`SELECT  id, ts, sender, topic, header_subject, body, parent 
+		FROM {{.Records}} 
+		WHERE parent = $1;`)
+
+	store.Register(queryAnswersIds,
+		`SELECT id
+		FROM {{.Records}}
+		WHERE parent = $1`)
+
+	store.Register(queryAttachments,
+		`SELECT record_id, content_type, file_name
+		FROM {{.Attachments}}
+		WHERE record_id = $1`)
 
 	handler := func(c echo.Context) error {
 		paramId := c.Param("id")
 		paramTopic := c.Param("topic")
-		q := store.QueryFunc(queryMessage, paramId)
+		qm := store.QueryFunc(queryMessage, paramId)
+		qa := store.QueryFunc(queryAttachments, paramId)
 		var doc = makeDocument()
 		var (
-			id      int
-			sender  string
-			message sql.RawBytes
-			parent  sql.NullInt64
+			id          int
+			ts          pgtype.Timestamp
+			sender      string
+			topic       string
+			subject     string
+			body        string
+			parent      pgtype.Int4
+			contentType string
+			fileName    string
+			attachments []attachmentRecord
 		)
 
-		defer func() { message = []byte{} }()
+		block := Div(ClassAttr("message-block"))
+		attBlock := Div(ClassAttr("attachment-block"))
 
-		return q(RowCallback(func() {
-			msgReader := bytes.NewReader(message)
-			info, msgNode := formatMessage(paramTopic, id, msgReader)
+		return qm(RowCallback(func() {
 			pnode := NoDisplay
-			if parent.Valid {
+			if parent.Status == pgtype.Present {
 				pnode = Div(ClassAttr("parent"),
 					A(ClassAttr("link").
-						Set("href", fmt.Sprintf("/%s/%v", paramTopic, parent.Int64)),
+						Set("href", fmt.Sprintf("/%s/%d", paramTopic, parent.Int)),
 						Text("parent")))
 			}
 
-			block := Div(ClassAttr("message-block"),
+			block.Append(
 				Div(ClassAttr("message-header"),
 					Span(ClassAttr("message-sender"),
-						Text(fmt.Sprintf("%s - %s", senderName(sender), info.t))),
+						Text(fmt.Sprintf("%s - %s", senderName(sender), ts.Time))),
 					pnode,
 					A(ClassAttr("link").
 						Set("href", fmt.Sprintf("mailto:%s+%v@%s", paramTopic, id, c.Request().Host)),
 						Text("answer"))),
-				Div(ClassAttr("message-body"), msgNode))
+				Div(ClassAttr("message-body"), Text(body)),
+				attBlock)
 
 			doc.body.Append(
-				header(info.subject, paramTopic, paramId),
-				block, formatAnswers(paramTopic, paramId, store, c, 1))
-		}), &id, &sender, &message, &parent).
+				header(subject, paramTopic, paramId),
+				block, formatAnswers(paramId, store, c, 1))
+		}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 			FoldErrorF(
 				func(err error) error {
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 				},
 				func(bool) error {
+					qa(RowCallback(func() {
+						attachments = append(attachments, attachmentRecord{
+							sender: encodedSender(sender),
+							topic:  topic,
+							record: id,
+							ct:     contentType,
+							fn:     fileName,
+						})
+					}), &id, &contentType, &fileName)
+
+					attBlock.Append(formatAttachments(attachments))
+
 					return c.HTML(http.StatusOK, doc.Render())
 				})
 
@@ -330,59 +317,49 @@ func showMessage(app *echo.Echo, store Store, cont chan string) {
 	app.GET("/:topic/:id", handler)
 }
 
-func showAttachment(app *echo.Echo, store Store, cont chan string) {
+const queryAttachment = "attachment/get-one"
 
-	store.Register("mail/get-attachment",
-		`SELECT id,  message FROM {{.RawMails}} WHERE id = $1;`)
+func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
+	store.Register(queryAttachment,
+		`SELECT content_type, file_name
+		FROM {{.Attachments}}
+		WHERE record_id = $1 AND file_name = $2`)
+
 	handler := func(c echo.Context) error {
-		paramId := c.Param("id")
+		sender := c.Param("sender")
+		topic := c.Param("topic")
+		id := c.Param("id")
 		name := c.Param("name")
-		log.Printf("showAttachment Query Start")
-		rows, err := store.Query("mail/get-attachment", paramId)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
-		log.Printf("showAttachment Query End")
 
 		var (
-			id      int
-			message []byte
+			ct string
+			fn string
 		)
-		defer func() { rows.Close() }()
-		defer func() { message = []byte{} }()
 
-		for rows.Next() {
-			log.Printf("showAttachment Row Start")
+		store.QueryFunc(queryAttachment, id, name).Exec(&ct, &fn)
+		fp := path.Join(sender, topic, id, fn)
+		return v.Reader(fp).FoldErrorF(
+			func(err error) error {
+				return echo.NotFoundHandler(c)
+			},
+			func(r io.Reader) error {
+				return c.Stream(http.StatusOK, ct, r)
+			})
 
-			scanError := rows.Scan(&id, &message)
-			if scanError != nil {
-				errMesg := scanError.Error()
-				cont <- errMesg
-				break
-			}
-			a := getAttachment(name, &message)
-			// var gcs debug.GCStats
-			// debug.ReadGCStats(&gcs)
-			// log.Printf("GC  *v", gcs)
-			debug.FreeOSMemory()
-			return c.Stream(http.StatusOK, a.mediaType, a.r)
-		}
-
-		return c.String(http.StatusNotFound, name)
 	}
-	app.GET("/attachment/:id/:name", handler)
+	app.GET("/attachments/:sender/:topic/:id/:name", handler)
 }
 
-func regHTTPHandlers(app *echo.Echo, store Store, cont chan string) {
-	listTopics(app, store, cont)
-	listInTopics(app, store, cont)
-	showMessage(app, store, cont)
-	showAttachment(app, store, cont)
+func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string) {
+	listTopics(app, store, v, cont)
+	listInTopics(app, store, v, cont)
+	showMessage(app, store, v, cont)
+	showAttachment(app, store, v, cont)
 }
 
-func StartHTTP(cont chan string, iface string, store Store) {
+func StartHTTP(cont chan string, iface string, store Store, v Volume) {
 	app := echo.New()
-	regHTTPHandlers(app, store, cont)
+	regHTTPHandlers(app, store, v, cont)
 	cont <- fmt.Sprintf("HTTP ready on %s", iface)
 	app.Start(iface)
 }

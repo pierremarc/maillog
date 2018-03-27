@@ -15,8 +15,10 @@ type DbConfig struct {
 }
 
 type Tables struct {
-	RawMails string
-	Answers  string
+	RawMails    string
+	Answers     string
+	Records     string
+	Attachments string
 }
 
 type Config interface {
@@ -30,8 +32,12 @@ type config struct {
 	Name     string `json:name`
 	Password string `json:password`
 
-	RawMails string `rawmails`
-	Answers  string `answers`
+	RawMails    string `rawmails`
+	Answers     string `answers`
+	Records     string `records`
+	Attachments string `attachments`
+
+	Volume string `volume`
 }
 
 func (c config) Db() DbConfig {
@@ -44,8 +50,10 @@ func (c config) Db() DbConfig {
 }
 func (c config) Tables() Tables {
 	return Tables{
-		RawMails: c.RawMails,
-		Answers:  c.Answers,
+		RawMails:    c.RawMails,
+		Answers:     c.Answers,
+		Records:     c.Records,
+		Attachments: c.Attachments,
 	}
 }
 
@@ -78,4 +86,8 @@ func GetDbConfig(fn string) DbConfig {
 func GetTables(fn string) Tables {
 	conf := getConfig(fn)
 	return conf.Tables()
+}
+func GetVolume(fn string) string {
+	conf := getConfig(fn)
+	return conf.Volume
 }

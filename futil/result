@@ -36,8 +36,12 @@ type err{{ $label }} struct{
 	left error
 }
 
-func Err{{ $label }}(err error) Result{{ $label }} {
-	return err{{ $label }}{err}
+func Err{{ $label }}(err interface{}) Result{{ $label }} {
+	switch err.(type) {
+		case string : return err{{ $label }}{errors.New(err.(string))}
+		case error : return err{{ $label }}{err.(error)}
+	} 
+	return err{{ $label }}{errors.New("Err{{ $label }} called with something else than string or error")}
 }
 
 // map Err{{ $label }}

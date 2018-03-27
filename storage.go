@@ -65,6 +65,8 @@ func (c Tables) makeQ(pool *pgx.ConnPool, name string) Querier {
 			log.Println("Error acquiring connection:", err)
 		}
 		defer pool.Release(conn)
+		// log.Printf("Query %s", qs)
+		// log.Println(args...)
 		return pool.Query(qs, args...)
 	}
 }
@@ -100,8 +102,8 @@ func (store Store) Register(name string, qs string) {
 
 type queryFunc func(cb rowsCb, cells ...interface{}) ResultBool
 
-func (qf queryFunc) Exec(cells ...interface{}) {
-	qf(RowCallback(func() {}), cells...)
+func (qf queryFunc) Exec(cells ...interface{}) ResultBool {
+	return qf(RowCallback(func() {}), cells...)
 }
 
 func (store Store) QueryFunc(name string, args ...interface{}) queryFunc {
