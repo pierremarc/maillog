@@ -29,13 +29,14 @@ func mainContentType(p *multipart.Part) string {
 
 type SerializedPart interface {
 	ContentType() string
+	MediaType() string
+	MainType() string
+	SubType() string
 	ContentEncoding() string
 	Content() []byte
 	DecodedContent() []byte
 	ContentString() string
 	FileName() string
-	MainType() string
-	SubType() string
 	Walk(func(SerializedPart))
 }
 
@@ -56,6 +57,99 @@ type SerializedMessage interface {
 type serMsg struct {
 	orig *mail.Message
 	root *serPart
+}
+
+func (s *serPart) ContentType() string {
+	return s.contentType
+}
+func (s *serPart) MainType() string {
+	mediaType, _, err := mime.ParseMediaType(s.contentType)
+	if err != nil {
+		return "*"
+	}
+	ctParts := strings.Split(mediaType, "/")
+	return ctParts[0]
+}
+
+func (s *serPart) MediaType() string {
+	mediaType, _, err := mime.ParseMediaType(s.contentType)
+	if err != nil {
+		return "*/*"
+	}
+	return mediaType
+}
+
+func (s *serPart) SubType() string {
+	mediaType, _, err := mime.ParseMediaType(s.contentType)
+	if err != nil {
+		return "*"
+	}
+	ctParts := strings.Split(mediaType, "/")
+	return ctParts[1]
+}
+
+func (s *serPart) ContentEncoding() string {
+	return s.contentEncoding
+}
+func (s *serPart) Content() []byte {
+	return s.content
+}
+func (s *serPart) DecodedContent() []byte {
+	return decodeContent(s.content, s.contentEncoding)
+}
+
+func (s *serPart) ContentString() string {
+	return fmt.Sprintf("%s", decodeContent(s.content, s.contentEncoding))
+}
+func (s *serPart) FileName() string {
+	return s.filename
+}
+
+func (s *serPart) Walk(f func(SerializedPart)) {
+	// log.Printf("serPart.Walk() %v", s)
+	f(s)
+	for _, p := range s.children {
+		p.Walk(f)
+	}
+}
+
+func walkPartSync(r io.Reader, boundary string, parts *[]SerializedPart) {
+	// log.Printf("walkPartSync %v", r)
+	reader := multipart.NewReader(r, boundary)
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			log.Printf("Err on NextPart %s", err.Error())
+			break
+		}
+
+		contentType := part.Header.Get(HeaderContentType)
+		// cte := part.Header.Get(HeaderContentTranferEncoding)
+		mediatype, params, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			log.Printf("Err on ParseMediaType %s", err.Error())
+			break
+		}
+
+		sp := serPartF(part)
+		*parts = append(*parts, &sp)
+		if isMultipart(mediatype) {
+			newBoundary := params["boundary"]
+			walkPartSync(part, newBoundary, &sp.children)
+		}
+		// } else {
+		// 	bs, _ := ioutil.ReadAll(part)
+		// 	log.Println("BS", bs)
+		// 	ResultSByteFrom(ioutil.ReadAll(part)).
+		// 		FoldF(
+		// 			func(error) { log.Printf("Failed to read body (%s) (%s)", mediatype, cte) },
+		// 			func(body []byte) {
+		// 				log.Printf("Success to read body (%s) (%s)\n<<\n%s\n>>", mediatype, cte, body)
+		// 				sp.content = body
+		// 			})
+		// }
+		part.Close()
+	}
 }
 
 func MakeSerializedMsg(orig *[]byte) ResultSerializedMessage {
@@ -82,6 +176,7 @@ func (s *serMsg) Get(key string) string {
 }
 
 func (s *serMsg) Parse() SerializedMessage {
+	log.Println("Parse")
 	if s.orig == nil {
 		return s
 	}
@@ -90,6 +185,7 @@ func (s *serMsg) Parse() SerializedMessage {
 		s.orig.Header.Get(HeaderContentType))
 
 	if err != nil {
+		log.Printf("Failed ParseMediaType (%v)", err)
 		return s
 	}
 
@@ -103,68 +199,17 @@ func (s *serMsg) Parse() SerializedMessage {
 		walkPartSync(s.orig.Body, boundary, &s.root.children)
 	} else {
 		ResultSByteFrom(ioutil.ReadAll(s.orig.Body)).
-			Map(func(body []byte) {
-				s.root.content = body
-			})
+			FoldF(
+				func(error) {
+					log.Printf("Failed to read body (%s) (%s)", mediatype, cte)
+				},
+				func(body []byte) {
+					log.Printf("Success to read body (%s) (%s)", mediatype, cte)
+					s.root.content = body
+				})
 	}
 
 	return s
-}
-
-func (s *serPart) ContentType() string {
-	return s.contentType
-}
-func (s *serPart) ContentEncoding() string {
-	return s.contentEncoding
-}
-func (s *serPart) Content() []byte {
-	return s.content
-}
-func (s *serPart) DecodedContent() []byte {
-	return decodeContent(s.content, s.contentEncoding)
-}
-
-func (s *serPart) ContentString() string {
-	return fmt.Sprintf("%s", decodeContent(s.content, s.contentEncoding))
-}
-func (s *serPart) FileName() string {
-	return s.filename
-}
-
-func (s *serPart) MainType() string {
-	mediaType, _, err := mime.ParseMediaType(s.contentType)
-	if err != nil {
-		return "any"
-	}
-	ctParts := strings.Split(mediaType, "/")
-	return ctParts[0]
-}
-
-func (s *serPart) SubType() string {
-	mediaType, _, err := mime.ParseMediaType(s.contentType)
-	if err != nil {
-		return "any"
-	}
-	ctParts := strings.Split(mediaType, "/")
-	return ctParts[1]
-}
-
-// func walker(s *serPart, c chan SerializedPart, depth int) {
-// 	c <- s
-// 	for _, p := range s.children {
-// 		sp := p.(*serPart)
-// 		walker(sp, c, depth+1)
-// 	}
-// 	if 0 == depth {
-// 		c <- nil
-// 	}
-// }
-
-func (s *serPart) Walk(f func(SerializedPart)) {
-	f(s)
-	for _, p := range s.children {
-		p.Walk(f)
-	}
 }
 
 func serPartF(p *multipart.Part) serPart {
@@ -175,6 +220,7 @@ func serPartF(p *multipart.Part) serPart {
 	log.Printf("serPartF %s %s", ct, fn)
 	input, err := ioutil.ReadAll(p)
 	if err != nil {
+		log.Printf("Failed to read part %v", err)
 		return ret
 	}
 
@@ -186,68 +232,8 @@ func serPartF(p *multipart.Part) serPart {
 	}
 }
 
-func walkParts(r io.Reader, boundary string, c chan SerializedPart, depth int) {
-	log.Printf("walkParts %v", depth)
-	// reader := multipart.NewReader(r, boundary)
-	// counter := 0
-	// for {
-	// 	counter = counter + 1
-	// 	part, err := reader.NextPart()
-	// 	if err != nil {
-	// 		log.Printf("Err on NextPart %s", err.Error())
-	// 		break
-	// 	}
-
-	// 	contentType := part.Header.Get("Content-Type")
-	// 	mediaType, params, err := mime.ParseMediaType(contentType)
-	// 	if err != nil {
-	// 		log.Printf("Err on ParseMediaType %s", err.Error())
-	// 		break
-	// 	}
-
-	// 	if !isMultipart(mediaType) {
-	// 		c <- serPartF(part)
-	// 	} else {
-	// 		newBoundary := params["boundary"]
-	// 		walkParts(part, newBoundary, c, depth+1)
-	// 	}
-	// 	part.Close()
-	// }
-
-	// if 0 == depth {
-	// 	c <- nil
-	// }
-}
-
-func walkPartSync(r io.Reader, boundary string, parts *[]SerializedPart) {
-	// log.Printf("walkPartSync %v", r)
-	reader := multipart.NewReader(r, boundary)
-	for {
-		part, err := reader.NextPart()
-		if err != nil {
-			log.Printf("Err on NextPart %s", err.Error())
-			break
-		}
-
-		contentType := part.Header.Get("Content-Type")
-		mediaType, params, err := mime.ParseMediaType(contentType)
-		if err != nil {
-			log.Printf("Err on ParseMediaType %s", err.Error())
-			break
-		}
-
-		sp := serPartF(part)
-		*parts = append(*parts, &sp)
-		if isMultipart(mediaType) {
-			newBoundary := params["boundary"]
-			walkPartSync(part, newBoundary, &sp.children)
-		}
-		part.Close()
-	}
-}
-
 func decodeContent(input []byte, cte string) []byte {
-	log.Printf("decodeContent (%s)", cte)
+	// log.Printf("decodeContent (%s)", cte)
 	switch cte {
 
 	case "base64":
@@ -283,56 +269,16 @@ func isMultipart(mediaType string) bool {
 	return false
 }
 
-type attachment struct {
-	r         io.Reader
-	name      string
-	mediaType string
-}
-
-func errAttach(r io.Reader) attachment {
-	return attachment{
-		r:         r,
-		name:      "Error.txt",
-		mediaType: "text/plain",
-	}
-}
-
-// func SerializeMessage(
-// 	data *[]byte, paramSender string, paramTopic string, paramId int) SerializedMessage {
-// 	sm := newMsg(data)
-// 	sm.Parse()
-// 	return sm
+// type attachment struct {
+// 	r         io.Reader
+// 	name      string
+// 	mediaType string
 // }
 
-// func getAttachment(name string, data *[]byte) attachment {
-// 	reader := bytes.NewReader(*data)
-// 	msg, err := mail.ReadMessage(reader)
-// 	if err != nil {
-// 		return errAttach(sReader("Error Reading Message: ", err.Error()))
+// func errAttach(r io.Reader) attachment {
+// 	return attachment{
+// 		r:         r,
+// 		name:      "Error.txt",
+// 		mediaType: "text/plain",
 // 	}
-// 	_, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
-// 	if err != nil {
-// 		return errAttach(sReader("Error MediaType: ", err.Error()))
-// 	}
-// 	mc := make(chan SerializedPart)
-// 	boundary := params["boundary"]
-// 	go walkParts(msg.Body, boundary, mc, 0)
-
-// 	for {
-// 		part := <-mc
-// 		if part == nil {
-// 			return errAttach(sReader("Attachment Not Found ", name))
-// 		}
-// 		mp := part.MainType()
-// 		fn := part.FileName()
-// 		content := decodeContent(part.Content(), part.ContentEncoding())
-// 		if mp != "text" && fn == name {
-// 			return attachment{
-// 				r:         bytes.NewReader(content),
-// 				name:      fn,
-// 				mediaType: part.ContentType(),
-// 			}
-// 		}
-// 	}
-
 // }

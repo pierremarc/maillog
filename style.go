@@ -138,6 +138,13 @@ border: 0.5px solid gray;
     padding: 1em;
 }
 
+
+div.answer-block {
+    padding-bottom: 0.5em;
+    margin-bottom: 0.5em;
+    border-bottom: 0.5px solid gray;
+}
+
 div.answer-block > div.answer-header-block {
    position: relative;
     border-bottom: 0.5px solid gray;

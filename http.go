@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path"
 	"strconv"
@@ -22,11 +23,12 @@ func link0(href string) Node {
 
 func header(title string, args ...string) Node {
 	r := Div(ClassAttr("header"))
-	bc := Div(ClassAttr("bc"), link("/", "root"))
+	bc := Div(ClassAttr("bc"), link("/", "/"+GetSiteName()))
 	u := ""
 	for i := 0; i < len(args); i++ {
-		u += "/" + args[i]
-		bc.Append(link(u, args[i]))
+		part := "/" + args[i]
+		u += part
+		bc.Append(link(u, part))
 	}
 	r.Append(
 		H1(ClassAttr("title"), Text(title)),
@@ -142,20 +144,19 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 		parent      pgtype.Int4
 		contentType string
 		fileName    string
-		attachments []attachmentRecord
 	)
 
 	qi := store.QueryFunc(queryAnswersIds, pid)
 	qm := store.QueryFunc(queryAnswers, pid)
 
+	var nas = map[int]Node{}
+	var sas = map[int]string{}
+
 	qi(RowCallback(func() {
 		aids = append(aids, id)
-	}), &id)
-
-	var nas = map[int]Node{}
-	for _, aid := range aids {
-		nas[aid] = Div(ClassAttr("attachment-block"))
-	}
+		nas[id] = Div(ClassAttr("attachment-block"))
+		sas[id] = sender
+	}), &id, &sender)
 
 	root := Div(ClassAttr(fmt.Sprintf("answer depth-%v", depth)))
 
@@ -166,30 +167,35 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 				H2(ClassAttr("answer-subject"),
 					A(ClassAttr("link").
 						Set("href", fmt.Sprintf("/%s/%v", topic, id)),
-						Text(subject))),
-				A(ClassAttr("answer-link").
-					Set("href", fmt.Sprintf("mailto:%s+%v@%s", topic, id, c.Request().Host)),
-					Text("answer"))),
+						Text(senderName(sender)))),
+				A(ClassAttr("answer-link link").
+					Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%s",
+						topic, id, c.Request().Host, topic, pid)),
+					Text("reply"))),
 			Div(ClassAttr("answer-body"), Text(body)), nas[id])
 		root.Append(block, formatAnswers(strconv.Itoa(id), store, c, depth+1))
 	}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 		FoldNodeF(
 			func(err error) Node { return Text(err.Error()) },
 			func(_ bool) Node {
+				attachments := []attachmentRecord{}
 				for _, aid := range aids {
 					attBlock := nas[aid]
 					qa := store.QueryFunc(queryAttachments, aid)
 					qa(RowCallback(func() {
+						log.Printf("attach to answer %s(%s), %s, %d, %s",
+							sas[aid], encodedSender(sas[aid]), topic, aid, fileName)
 						attachments = append(attachments, attachmentRecord{
-							sender: encodedSender(sender),
+							sender: encodedSender(sas[aid]),
 							topic:  topic,
-							record: id,
+							record: aid,
 							ct:     contentType,
 							fn:     fileName,
 						})
 					}), &id, &contentType, &fileName)
 
 					attBlock.Append(formatAttachments(attachments))
+					attachments = []attachmentRecord{}
 				}
 				return root
 			})
@@ -237,7 +243,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 		WHERE parent = $1;`)
 
 	store.Register(queryAnswersIds,
-		`SELECT id
+		`SELECT id, sender
 		FROM {{.Records}}
 		WHERE parent = $1`)
 
@@ -283,8 +289,8 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 						Text(fmt.Sprintf("%s - %s", senderName(sender), ts.Time))),
 					pnode,
 					A(ClassAttr("link").
-						Set("href", fmt.Sprintf("mailto:%s+%v@%s", paramTopic, id, c.Request().Host)),
-						Text("answer"))),
+						Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%d", paramTopic, id, c.Request().Host, topic, id)),
+						Text("reply"))),
 				Div(ClassAttr("message-body"), Text(body)),
 				attBlock)
 
@@ -298,6 +304,8 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 				},
 				func(bool) error {
 					qa(RowCallback(func() {
+						log.Printf("attach to record %s(%s), %s, %d, %s",
+							sender, encodedSender(sender), topic, id, fileName)
 						attachments = append(attachments, attachmentRecord{
 							sender: encodedSender(sender),
 							topic:  topic,
@@ -340,7 +348,7 @@ func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
 		fp := path.Join(sender, topic, id, fn)
 		return v.Reader(fp).FoldErrorF(
 			func(err error) error {
-				return echo.NotFoundHandler(c)
+				return echo.NewHTTPError(http.StatusNotFound, err.Error())
 			},
 			func(r io.Reader) error {
 				return c.Stream(http.StatusOK, ct, r)

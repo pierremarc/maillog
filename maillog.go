@@ -15,9 +15,15 @@ var configFile string
 var smtpdI string
 var httpdI string
 var migrate bool
+var siteName string
+
+func GetSiteName() string {
+	return siteName
+}
 
 func init() {
 	flag.BoolVar(&migrate, "migrate", false, "rather migrate")
+	flag.StringVar(&siteName, "name", "log", "A name for the root link")
 	flag.StringVar(&configFile, "config", "config.json", "configuration file")
 	flag.StringVar(&smtpdI, "smtp", "0.0.0.0:2525", "interface for smtpd")
 	flag.StringVar(&httpdI, "http", "0.0.0.0:8080", "interface for httpd")
@@ -47,7 +53,7 @@ func main() {
 		cont := make(chan string)
 		go StartSMTP(cont, smtpdI, store, volume)
 		go StartHTTP(cont, httpdI, store, volume)
-		go profiler()
+		// go profiler()
 		controller(cont)
 	}
 }

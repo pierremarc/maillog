@@ -140,7 +140,7 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 						Root().
 						Walk(func(p SerializedPart) {
 							if p != nil {
-								if "text/plain" == p.ContentType() {
+								if "text/plain" == p.MediaType() {
 									body += p.ContentString()
 								} else {
 									attachments = append(attachments, p)
