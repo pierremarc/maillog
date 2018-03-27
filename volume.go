@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/gosimple/slug"
 )
@@ -53,7 +54,12 @@ func ensureDir(dir string) {
 }
 
 func writeAttachment(dir string, fn string, data []byte) ResultString {
-	fname := slug.Make(fn)
+	if len(fn) == 0 {
+		return ErrString("Filename Can't be Empty")
+	}
+	ext := path.Ext(fn)
+	basename := strings.Split(fn, ".")[0]
+	fname := slug.Make(basename) + ext
 	err := ioutil.WriteFile(path.Join(dir, fname), data, 0644)
 	if err != nil {
 		return ErrString(err)
