@@ -194,6 +194,8 @@ span.message-item-ts {
     color: #9E9E9E;
 }
 
-
+p.body-par {
+    line-height: 140%;
+}
 
 ` // end of stylesheet
