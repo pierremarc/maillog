@@ -172,10 +172,12 @@ div.answer.depth-8 { margin-left: 7em; }
     font-size: 120%;
 }
 .topic-count{
-    font-size: 69%;
-    font-style: italic;
+    font-size: small;
 }
 
+span.topic-ts {
+    font-size: small;
+}
 .message-item {
         margin-bottom: .5em;
 }
@@ -184,5 +186,14 @@ div.answer.depth-8 { margin-left: 7em; }
     font-size: 69%;
     font-style: italic;
 }
+
+
+span.message-item-ts {
+    font-family: monospace;
+    font-size: 64%;
+    color: #9E9E9E;
+}
+
+
 
 ` // end of stylesheet

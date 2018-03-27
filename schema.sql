@@ -27,7 +27,7 @@ CREATE TABLE public.raw_emails2
 
 CREATE TABLE public.records (
   id serial,
-  ts timestamp DEFAULT NOW(),
+  ts timestamp WITH TIMEZONEDEFAULT NOW(),
   sender varchar(256),
   recipient varchar(256),
   topic  varchar(256),
@@ -45,3 +45,5 @@ CREATE TABLE public.attachments (
   content_type varchar(256),
   file_name varchar(256)
 );
+
+-- ALTER TABLE public.records ALTER ts TYPE timestamptz USING ts AT TIME ZONE 'UTC';

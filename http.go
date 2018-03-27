@@ -8,6 +8,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/pgtype"
 	"github.com/labstack/echo"
@@ -49,7 +50,10 @@ func makeDocument() document {
 
 func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register("mail/topic-list",
-		`SELECT DISTINCT(topic) topic, count(id) FROM {{.Records}} GROUP BY topic;`)
+		`SELECT DISTINCT(topic) topic, count(id), max(ts) as mts
+        FROM {{.Records}} 
+        GROUP BY topic
+        ORDER BY topic ASC;`)
 
 	app.GET("/", func(c echo.Context) error {
 		var doc = makeDocument()
@@ -57,6 +61,7 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 		var (
 			topic string
 			count int
+			mts   pgtype.Timestamp
 		)
 
 		doc.body.Append(header("Topics"))
@@ -66,8 +71,9 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 			doc.body.Append(Div(attrs,
 				A(ClassAttr("topic-link link").Set("href", "/"+topic),
 					Text(topic)),
-				Span(ClassAttr("topic-count"), Textf(" %v", count))))
-		}), &topic, &count).
+				Span(ClassAttr("topic-count"), Textf("(%d messages),", count)),
+				Span(ClassAttr("topic-ts"), Textf("(last update: %s)", formatTimestamp(mts.Time)))))
+		}), &topic, &count, &mts).
 			FoldErrorF(
 				func(err error) error {
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -88,11 +94,17 @@ func ensureSubject(s string) string {
 	return ts
 }
 
+func formatTimestamp(t time.Time) string {
+	d := time.Since(t)
+	return d.Truncate(time.Second).String()
+}
+
 func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register("mail/topic-messages",
-		`SELECT id, sender, header_subject
+		`SELECT id,ts, sender, header_subject
 		FROM {{.Records}}  
-		WHERE topic = $1 AND parent IS NULL;`)
+        WHERE topic = $1 AND parent IS NULL 
+        ORDER BY ts DESC;`)
 
 	handler := func(c echo.Context) error {
 		paramTopic := c.Param("topic")
@@ -100,6 +112,7 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 		var doc = makeDocument()
 		var (
 			id      int
+			ts      pgtype.Timestamptz
 			sender  string
 			subject string
 		)
@@ -113,8 +126,9 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 			doc.body.Append(Div(attrs,
 				A(ClassAttr("message-link link").Set("href", url),
 					Text(ensureSubject(subject))),
-				Span(ClassAttr("message-item-sender"), Text(senderName(sender)))))
-		}), &id, &sender, &subject).
+				Span(ClassAttr("message-item-sender"), Text(senderName(sender))),
+				Span(ClassAttr("message-item-ts"), Textf(formatTimestamp(ts.Time)))))
+		}), &id, &ts, &sender, &subject).
 			FoldErrorF(
 				func(err error) error {
 					return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -136,7 +150,7 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	var (
 		id          int
 		aids        []int
-		ts          pgtype.Timestamp
+		ts          pgtype.Timestamptz
 		sender      string
 		topic       string
 		subject     string
@@ -235,17 +249,19 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register(queryMessage,
 		`SELECT  id, ts, sender, topic, header_subject, body, parent 
 		FROM {{.Records}} 
-		WHERE id = $1;`)
+        WHERE id = $1;`)
 
 	store.Register(queryAnswers,
 		`SELECT  id, ts, sender, topic, header_subject, body, parent 
 		FROM {{.Records}} 
-		WHERE parent = $1;`)
+        WHERE parent = $1
+        ORDER BY ts ASC;`)
 
 	store.Register(queryAnswersIds,
 		`SELECT id, sender
 		FROM {{.Records}}
-		WHERE parent = $1`)
+        WHERE parent = $1
+        ORDER BY ts ASC`)
 
 	store.Register(queryAttachments,
 		`SELECT record_id, content_type, file_name
@@ -260,7 +276,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 		var doc = makeDocument()
 		var (
 			id          int
-			ts          pgtype.Timestamp
+			ts          pgtype.Timestamptz
 			sender      string
 			topic       string
 			subject     string
