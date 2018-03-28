@@ -85,14 +85,14 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	})
 }
 
-const NoSubject = "***"
+const NoSubject = "[empty subject]"
 
 func ensureSubject(s string) string {
 	ts := strings.Trim(s, " ")
 	if 0 == len(ts) {
 		return NoSubject
 	}
-	return ts
+	return decodeSubject(ts)
 }
 
 func formatTimestamp(t time.Time) string {
@@ -320,7 +320,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 				attBlock)
 
 			doc.body.Append(
-				header(subject, paramTopic, paramId),
+				header(ensureSubject(subject), paramTopic, paramId),
 				block, formatAnswers(paramId, store, c, 1))
 		}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 			FoldErrorF(
