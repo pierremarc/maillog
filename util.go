@@ -4,6 +4,9 @@ import (
 	"crypto/md5"
 	"fmt"
 	"mime"
+	"strings"
+
+	"github.com/labstack/echo"
 )
 
 func encodedSender(s string) string {
@@ -24,4 +27,10 @@ func decodeSubject(s string) string {
 		}
 	}
 	return s
+}
+
+func getHostDomain(c echo.Context) string {
+	host := c.Request().Host
+	parts := strings.Split(host, ":")
+	return parts[0]
 }

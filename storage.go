@@ -110,6 +110,7 @@ func (store Store) QueryFunc(name string, args ...interface{}) queryFunc {
 	f := func(cb rowsCb, cells ...interface{}) ResultBool {
 		rows, err := store.Query(name, args...)
 		if err != nil {
+			log.Printf("Query Error(%s): %s", name, err.Error())
 			return ErrBool(err)
 		}
 		defer func() {

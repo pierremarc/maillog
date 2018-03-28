@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
@@ -103,7 +102,7 @@ func (n *node) Append(ns ...Node) Node {
 	return n
 }
 func renderNode(n node) string {
-	log.Printf("renderNode %v", n)
+	// log.Printf("renderNode %v", n)
 	var attrs []string
 	for _, p := range n.attrs {
 		kv := fmt.Sprintf("%s=\"%s\"", p.k, p.v)

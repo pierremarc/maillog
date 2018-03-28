@@ -19,6 +19,7 @@ type Tables struct {
 	Answers     string
 	Records     string
 	Attachments string
+	Domains     string
 }
 
 type Config interface {
@@ -36,6 +37,7 @@ type config struct {
 	Answers     string `answers`
 	Records     string `records`
 	Attachments string `attachments`
+	Domains     string `domains`
 
 	Volume string `volume`
 }
@@ -54,6 +56,7 @@ func (c config) Tables() Tables {
 		Answers:     c.Answers,
 		Records:     c.Records,
 		Attachments: c.Attachments,
+		Domains:     c.Domains,
 	}
 }
 

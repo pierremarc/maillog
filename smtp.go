@@ -68,32 +68,6 @@ func getAnswer(topic string) OptionUInt64 {
 
 func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 
-	// store.Register("mail/log",
-	// 	`INSERT INTO {{.RawMails}} (sender, topic, subject, message)
-	// 	VALUES ($1, $2, $3, $4)
-	// 	RETURNING id`)
-
-	// store.Register("mail/answer",
-	// 	`INSERT INTO {{.Answers}} (parent, child)
-	// 	VALUES ($1, $2)`)
-
-	store.Register("mail/recordp",
-		`INSERT INTO {{.Records}} 
-		(sender, recipient, topic, domain, header_date, header_subject, body, payload, parent)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id`)
-
-	store.Register("mail/record",
-		`INSERT INTO {{.Records}} 
-		(sender, recipient, topic, domain, header_date, header_subject, body, payload)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id`)
-
-	store.Register("attachment/record",
-		`INSERT INTO {{.Attachments}}
-		(record_id, content_type, file_name)
-		VALUES ($1, $2, $3)`)
-
 	return func(origin net.Addr, from string, to []string, data []byte) {
 
 		fail := func() string {
@@ -148,12 +122,12 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 							}
 						})
 
-					qf := store.QueryFunc(queryName,
+					qf := store.QueryFunc(QueryInsertRecord,
 						sender, recipient, topic, domain,
 						dateHeader, subjectHeader, body, data)
 
 					if parent >= 0 {
-						qf = store.QueryFunc(queryName,
+						qf = store.QueryFunc(QueryInsertRecordParent,
 							sender, recipient, topic, domain,
 							dateHeader, subjectHeader, body, data, parent)
 					}
@@ -166,7 +140,7 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 					for _, at := range attachments {
 						v.Write(WriteOptions{encodedSender(sender), topic, id, at.FileName(), at.DecodedContent()}).
 							Map(func(fn string) {
-								store.QueryFunc("attachment/record",
+								store.QueryFunc(QueryInsertAttachment,
 									id, at.ContentType(), fn).Exec()
 							})
 					}

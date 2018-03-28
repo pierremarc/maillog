@@ -47,6 +47,7 @@ func main() {
 	vroot := GetVolume(configFile)
 	store := NewStore(dbc, tabs)
 	volume := NewVolume(vroot)
+	RegisterQueries(store)
 	if migrate {
 		MakeMigration(store, volume)
 	} else {

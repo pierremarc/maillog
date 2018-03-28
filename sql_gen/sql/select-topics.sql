@@ -1,5 +1,3 @@
--- topics
-
 SELECT 
     DISTINCT(topic) 
     topic, 
@@ -7,7 +5,7 @@ SELECT
     max(ts) as mts
 FROM {{.Records}} 
 WHERE
-    domain = $ 1
+    domain = $1
     AND strpos(topic, '_') <> 1
 GROUP BY topic
 ORDER BY topic ASC

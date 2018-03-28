@@ -49,16 +49,11 @@ func makeDocument() document {
 }
 
 func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
-	store.Register("mail/topic-list",
-		`SELECT DISTINCT(topic) topic, count(id), max(ts) as mts
-		FROM {{.Records}} 
-		WHERE strpos(topic, '_') <> 1
-        GROUP BY topic
-        ORDER BY topic ASC;`)
 
 	app.GET("/", func(c echo.Context) error {
+		log.Printf("List Topics(%s)", getHostDomain(c))
 		var doc = makeDocument()
-		q := store.QueryFunc("mail/topic-list")
+		q := store.QueryFunc(QuerySelectTopics, getHostDomain(c))
 		var (
 			topic string
 			count int
@@ -101,15 +96,11 @@ func formatTimestamp(t time.Time) string {
 }
 
 func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
-	store.Register("mail/topic-messages",
-		`SELECT id,ts, sender, header_subject
-		FROM {{.Records}}  
-        WHERE topic = $1 AND parent IS NULL 
-        ORDER BY ts DESC;`)
 
 	handler := func(c echo.Context) error {
 		paramTopic := c.Param("topic")
-		q := store.QueryFunc("mail/topic-messages", paramTopic)
+		q := store.QueryFunc(QuerySelectIntopic,
+			getHostDomain(c), paramTopic)
 		var doc = makeDocument()
 		var (
 			id      int
@@ -142,19 +133,6 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	app.GET("/:topic", handler)
 }
 
-const queryMessage = "mail/get-message"
-const queryAnswers = "mail/get-answers"
-const queryAnswersIds = "mail/get-answers-ids"
-const queryAttachments = "mail/get-attachments"
-
-// func bodyToP(body string) []Node {
-// 	pars := NewArrayString(strings.Split(body, "\n"))
-
-// 	return pars.MapNode(func(p string) Node {
-// 		return P(ClassAttr("body-par"), Text(p))
-// 	}).Slice()
-// }
-
 func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	var (
 		id          int
@@ -169,8 +147,8 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 		fileName    string
 	)
 
-	qi := store.QueryFunc(queryAnswersIds, pid)
-	qm := store.QueryFunc(queryAnswers, pid)
+	qi := store.QueryFunc(QuerySelectAnswerids, pid)
+	qm := store.QueryFunc(QuerySelectAnswers, pid)
 
 	var nas = map[int]Node{}
 	var sas = map[int]string{}
@@ -193,7 +171,7 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 						Text(senderName(sender)))),
 				A(ClassAttr("answer-link link").
 					Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%s",
-						topic, id, c.Request().Host, topic, pid)),
+						topic, id, getHostDomain(c), topic, pid)),
 					Text("reply"))),
 			Div(ClassAttr("answer-body"), NewRawNode(body)), nas[id])
 		root.Append(block, formatAnswers(strconv.Itoa(id), store, c, depth+1))
@@ -204,7 +182,7 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 				attachments := []attachmentRecord{}
 				for _, aid := range aids {
 					attBlock := nas[aid]
-					qa := store.QueryFunc(queryAttachments, aid)
+					qa := store.QueryFunc(QuerySelectAttachments, aid)
 					qa(RowCallback(func() {
 						log.Printf("attach to answer %s(%s), %s, %d, %s",
 							sas[aid], encodedSender(sas[aid]), topic, aid, fileName)
@@ -255,33 +233,11 @@ func formatAttachments(rs []attachmentRecord) Node {
 }
 
 func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
-	store.Register(queryMessage,
-		`SELECT  id, ts, sender, topic, header_subject, body, parent 
-		FROM {{.Records}} 
-        WHERE id = $1;`)
-
-	store.Register(queryAnswers,
-		`SELECT  id, ts, sender, topic, header_subject, body, parent 
-		FROM {{.Records}} 
-        WHERE parent = $1
-        ORDER BY ts ASC;`)
-
-	store.Register(queryAnswersIds,
-		`SELECT id, sender
-		FROM {{.Records}}
-        WHERE parent = $1
-        ORDER BY ts ASC`)
-
-	store.Register(queryAttachments,
-		`SELECT record_id, content_type, file_name
-		FROM {{.Attachments}}
-		WHERE record_id = $1`)
-
 	handler := func(c echo.Context) error {
 		paramId := c.Param("id")
 		paramTopic := c.Param("topic")
-		qm := store.QueryFunc(queryMessage, paramId)
-		qa := store.QueryFunc(queryAttachments, paramId)
+		qm := store.QueryFunc(QuerySelectRecord, paramId)
+		qa := store.QueryFunc(QuerySelectAttachments, paramId)
 		var doc = makeDocument()
 		var (
 			id          int
@@ -314,7 +270,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 						Text(fmt.Sprintf("%s - %s", senderName(sender), ts.Time))),
 					pnode,
 					A(ClassAttr("link").
-						Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%d", paramTopic, id, c.Request().Host, topic, id)),
+						Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%d", paramTopic, id, getHostDomain(c), topic, id)),
 						Text("reply"))),
 				Div(ClassAttr("message-body"), NewRawNode(body)),
 				attBlock)
@@ -350,14 +306,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 	app.GET("/:topic/:id", handler)
 }
 
-const queryAttachment = "attachment/get-one"
-
 func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
-	store.Register(queryAttachment,
-		`SELECT content_type, file_name
-		FROM {{.Attachments}}
-		WHERE record_id = $1 AND file_name = $2`)
-
 	handler := func(c echo.Context) error {
 		sender := c.Param("sender")
 		topic := c.Param("topic")
@@ -369,7 +318,7 @@ func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
 			fn string
 		)
 
-		store.QueryFunc(queryAttachment, id, name).Exec(&ct, &fn)
+		store.QueryFunc(QuerySelectAttachment, id, name).Exec(&ct, &fn)
 		fp := path.Join(sender, topic, id, fn)
 		return v.Reader(fp).FoldErrorF(
 			func(err error) error {
@@ -391,9 +340,6 @@ func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string) {
 }
 
 func StartHTTP(cont chan string, iface string, store Store, v Volume) {
-	store.Register("domains",
-		`SELECT  id, http_name,  mx_name
-		FROM {{.Domains}}`)
 	app := echo.New()
 	regHTTPHandlers(app, store, v, cont)
 	cont <- fmt.Sprintf("HTTP ready on %s", iface)

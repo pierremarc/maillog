@@ -6,6 +6,6 @@ const Query{{ $Name }} = "{{ $Name }}"
 
 func RegisterQueries(store Store) {
 	{{ range $Name, $Query :=  .Queries }}
-	store.Register({{ $Name }}, `{{ $Query }}`)
+	store.Register(Query{{ $Name }}, `{{ $Query }}`)
 	{{ end }}
 }
