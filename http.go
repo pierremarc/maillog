@@ -51,7 +51,8 @@ func makeDocument() document {
 func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register("mail/topic-list",
 		`SELECT DISTINCT(topic) topic, count(id), max(ts) as mts
-        FROM {{.Records}} 
+		FROM {{.Records}} 
+		WHERE strpos(topic, '_') <> 1
         GROUP BY topic
         ORDER BY topic ASC;`)
 
@@ -84,14 +85,14 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	})
 }
 
-const NoSubject = "***"
+const NoSubject = "[empty subject]"
 
 func ensureSubject(s string) string {
 	ts := strings.Trim(s, " ")
 	if 0 == len(ts) {
 		return NoSubject
 	}
-	return ts
+	return decodeSubject(ts)
 }
 
 func formatTimestamp(t time.Time) string {
@@ -146,6 +147,14 @@ const queryAnswers = "mail/get-answers"
 const queryAnswersIds = "mail/get-answers-ids"
 const queryAttachments = "mail/get-attachments"
 
+func bodyToP(body string) []Node {
+	pars := NewArrayString(strings.Split(body, "\n"))
+
+	return pars.MapNode(func(p string) Node {
+		return P(ClassAttr("body-par"), Text(p))
+	}).Slice()
+}
+
 func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	var (
 		id          int
@@ -186,7 +195,7 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 					Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%s",
 						topic, id, c.Request().Host, topic, pid)),
 					Text("reply"))),
-			Div(ClassAttr("answer-body"), Text(body)), nas[id])
+			Div(ClassAttr("answer-body"), bodyToP(body)...), nas[id])
 		root.Append(block, formatAnswers(strconv.Itoa(id), store, c, depth+1))
 	}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 		FoldNodeF(
@@ -307,11 +316,11 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 					A(ClassAttr("link").
 						Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%d", paramTopic, id, c.Request().Host, topic, id)),
 						Text("reply"))),
-				Div(ClassAttr("message-body"), Text(body)),
+				Div(ClassAttr("message-body"), bodyToP(body)...),
 				attBlock)
 
 			doc.body.Append(
-				header(subject, paramTopic, paramId),
+				header(ensureSubject(subject), paramTopic, paramId),
 				block, formatAnswers(paramId, store, c, 1))
 		}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 			FoldErrorF(

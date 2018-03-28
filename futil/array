@@ -28,6 +28,9 @@ type Array{{ $label }} interface {
 
 type array{{ $label }} []{{$type}}
 
+func NewArray{{$label}}(a []{{$type}})Array{{$label}} {
+	return array{{$label}}(a)
+}
 
 func (a array{{$label}}) Slice() array{{$label}} {
 	return a

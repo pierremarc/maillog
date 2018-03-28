@@ -1,6 +1,6 @@
 //go:generate futil -type option -import time  String=string UInt64=uint64 Node=Node Time=time.Time Error=error  SerializedPart=SerializedPart
 //go:generate futil -type result -import io  -import errors -import net/mail -import github.com/jackc/pgx Bool=bool Node=Node ConnPool=*pgx.ConnPool  Error=error Store=Store  Message=*mail.Message SByte=[]byte String=string SerializedMessage=SerializedMessage Int=int  Reader=io.Reader
-//go:generate futil -type array   Int=int String=string
+//go:generate futil -type array   Int=int String=string Node=Node
 package main
 
 import (
