@@ -2,7 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
+
+	"github.com/microcosm-cc/bluemonday"
+	blackfriday "gopkg.in/russross/blackfriday.v2"
 )
 
 const textNodeTag = "__TEXT_NODE_TAG__"
@@ -42,8 +46,8 @@ type Node interface {
 	Text() TextNode
 	Tag() string
 	Attrs() attributes
-	Children() []Node
-	Append(n ...Node) *node
+	Children() ArrayNode
+	Append(n ...Node) Node
 	Render() string
 }
 
@@ -51,7 +55,35 @@ type node struct {
 	txt      TextNode
 	tag      string
 	attrs    attributes
-	children []Node
+	children ArrayNode
+}
+
+type raw string
+
+func NewRawNode(s string) raw {
+	return raw(s)
+}
+
+func (r raw) Text() TextNode {
+	return nil
+}
+func (r raw) Tag() string {
+	return "section"
+}
+func (r raw) Attrs() attributes {
+	return NewAttr()
+}
+func (r raw) Children() ArrayNode {
+	return NewArrayNode()
+}
+func (r raw) Append(ns ...Node) Node {
+	return r
+}
+func (r raw) Render() string {
+	d := strings.Join(strings.Split(string(r), "\n"), "\n\n")
+	unsafe := blackfriday.Run([]byte(d))
+	html := bluemonday.UGCPolicy().SanitizeBytes(unsafe)
+	return string(html)
 }
 
 func (n node) Text() TextNode {
@@ -63,33 +95,29 @@ func (n node) Tag() string {
 func (n node) Attrs() attributes {
 	return n.attrs
 }
-func (n node) Children() []Node {
+func (n node) Children() ArrayNode {
 	return n.children
 }
-
-func (n *node) Append(ns ...Node) *node {
-	n.children = append(n.children, ns...)
+func (n *node) Append(ns ...Node) Node {
+	n.children = n.children.Concat(NewArrayNode(ns...))
 	return n
 }
-
 func renderNode(n node) string {
-	var children []string
+	log.Printf("renderNode %v", n)
 	var attrs []string
-	for _, c := range n.children {
-		children = append(children, c.Render())
-	}
 	for _, p := range n.attrs {
 		kv := fmt.Sprintf("%s=\"%s\"", p.k, p.v)
 		attrs = append(attrs, kv)
 	}
 
+	children := n.children.MapString(func(n Node) string { return n.Render() })
+
 	return fmt.Sprintf("<%s %s>%s</%s>",
 		n.tag,
 		strings.Join(attrs, " "),
-		strings.Join(children, "\n"),
+		strings.Join(children.Slice(), "\n"),
 		n.tag)
 }
-
 func (n node) Render() string {
 	if textNodeTag == n.tag {
 		return n.txt.Content()
@@ -101,7 +129,7 @@ func createNode(tag string, attrs attributes, children ...Node) Node {
 	n := new(node)
 	n.tag = tag
 	n.attrs = attrs
-	n.children = children
+	n.children = NewArrayNode(children...)
 	return n
 }
 

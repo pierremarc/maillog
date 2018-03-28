@@ -147,13 +147,13 @@ const queryAnswers = "mail/get-answers"
 const queryAnswersIds = "mail/get-answers-ids"
 const queryAttachments = "mail/get-attachments"
 
-func bodyToP(body string) []Node {
-	pars := NewArrayString(strings.Split(body, "\n"))
+// func bodyToP(body string) []Node {
+// 	pars := NewArrayString(strings.Split(body, "\n"))
 
-	return pars.MapNode(func(p string) Node {
-		return P(ClassAttr("body-par"), Text(p))
-	}).Slice()
-}
+// 	return pars.MapNode(func(p string) Node {
+// 		return P(ClassAttr("body-par"), Text(p))
+// 	}).Slice()
+// }
 
 func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	var (
@@ -195,7 +195,7 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 					Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%s",
 						topic, id, c.Request().Host, topic, pid)),
 					Text("reply"))),
-			Div(ClassAttr("answer-body"), bodyToP(body)...), nas[id])
+			Div(ClassAttr("answer-body"), NewRawNode(body)), nas[id])
 		root.Append(block, formatAnswers(strconv.Itoa(id), store, c, depth+1))
 	}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 		FoldNodeF(
@@ -316,7 +316,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 					A(ClassAttr("link").
 						Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%d", paramTopic, id, c.Request().Host, topic, id)),
 						Text("reply"))),
-				Div(ClassAttr("message-body"), bodyToP(body)...),
+				Div(ClassAttr("message-body"), NewRawNode(body)),
 				attBlock)
 
 			doc.body.Append(

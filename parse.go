@@ -241,7 +241,6 @@ func decodeContent(input []byte, cte string) []byte {
 			content, err := base64.StdEncoding.DecodeString(string(input))
 			if err != nil {
 				log.Printf("Error:base64.StdEncoding.DecodeString (%s)", err.Error())
-				// return nil
 				return input
 			}
 			return content
@@ -253,7 +252,6 @@ func decodeContent(input []byte, cte string) []byte {
 			content, err := ioutil.ReadAll(r)
 			if err != nil {
 				log.Printf("Error:quotedprintable.NewReader (%s)", err.Error())
-				// return nil
 				return input
 			}
 			return content
