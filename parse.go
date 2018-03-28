@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -99,7 +98,8 @@ func (s *serPart) DecodedContent() []byte {
 }
 
 func (s *serPart) ContentString() string {
-	return fmt.Sprintf("%s", decodeContent(s.content, s.contentEncoding))
+	// return fmt.Sprintf("%s", decodeContent(s.content, s.contentEncoding))
+	return string(decodeContent(s.content, s.contentEncoding))
 }
 func (s *serPart) FileName() string {
 	return s.filename
@@ -233,14 +233,16 @@ func serPartF(p *multipart.Part) serPart {
 }
 
 func decodeContent(input []byte, cte string) []byte {
-	// log.Printf("decodeContent (%s)", cte)
+	log.Printf("decodeContent (%s)", cte)
 	switch cte {
 
 	case "base64":
 		{
 			content, err := base64.StdEncoding.DecodeString(string(input))
 			if err != nil {
-				return nil
+				log.Printf("Error:base64.StdEncoding.DecodeString (%s)", err.Error())
+				// return nil
+				return input
 			}
 			return content
 		}
@@ -250,7 +252,9 @@ func decodeContent(input []byte, cte string) []byte {
 			r := quotedprintable.NewReader(bytes.NewReader(input))
 			content, err := ioutil.ReadAll(r)
 			if err != nil {
-				return nil
+				log.Printf("Error:quotedprintable.NewReader (%s)", err.Error())
+				// return nil
+				return input
 			}
 			return content
 		}
