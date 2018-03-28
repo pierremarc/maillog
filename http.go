@@ -51,7 +51,8 @@ func makeDocument() document {
 func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	store.Register("mail/topic-list",
 		`SELECT DISTINCT(topic) topic, count(id), max(ts) as mts
-        FROM {{.Records}} 
+		FROM {{.Records}} 
+		WHERE strpos(topic, '_') <> 1
         GROUP BY topic
         ORDER BY topic ASC;`)
 
