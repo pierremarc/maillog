@@ -391,6 +391,9 @@ func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string) {
 }
 
 func StartHTTP(cont chan string, iface string, store Store, v Volume) {
+	store.Register("domains",
+		`SELECT  id, http_name,  mx_name
+		FROM {{.Domains}}`)
 	app := echo.New()
 	regHTTPHandlers(app, store, v, cont)
 	cont <- fmt.Sprintf("HTTP ready on %s", iface)
