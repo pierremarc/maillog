@@ -340,13 +340,14 @@ func notifyHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *N
 	handler := func(c echo.Context) error {
 		websocket.Handler(func(ws *websocket.Conn) {
 			defer ws.Close()
-			n.Subscribe(func(i interface{}) {
+			sub := n.Subscribe(func(i interface{}) {
 				switch i.(type) {
 				case int:
 					websocket.Message.Send(ws,
 						fmt.Sprintf("{\"record\": %d}", i.(int)))
 				}
 			})
+			defer n.Unsubscribe(sub)
 
 			for {
 				msg := ""
