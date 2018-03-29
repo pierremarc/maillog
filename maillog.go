@@ -1,27 +1,47 @@
 //go:generate futil -type option -import time  String=string UInt64=uint64 Node=Node Time=time.Time Error=error  SerializedPart=SerializedPart
 //go:generate futil -type result -import io  -import net/mail -import github.com/jackc/pgx Bool=bool Node=Node ConnPool=*pgx.ConnPool  Error=error Store=Store  Message=*mail.Message SByte=[]byte String=string SerializedMessage=SerializedMessage Int=int  Reader=io.Reader
 //go:generate futil -type array   Int=int String=string Node=Node
+//go:generate webgen -output queries.go -what sql -prefix Query
+//go:generate webgen -output style.go -what css
 package main
 
 import (
 	"flag"
 	"log"
+	"math"
 
 	"net/http"
 	_ "net/http/pprof"
+
+	"github.com/pierremarc/datasize"
 )
 
-var configFile string
-var smtpdI string
-var httpdI string
-var migrate bool
-var siteName string
+const maxInt = int(^uint(0) >> 1)
+
+var (
+	configFile  string
+	smtpdI      string
+	httpdI      string
+	migrate     bool
+	siteName    string
+	smtpMaxSize string
+)
 
 func GetSiteName() string {
 	return siteName
 }
 
+func GetMaxSize() int {
+	var v datasize.ByteSize
+	err := v.UnmarshalText([]byte(smtpMaxSize))
+	if err != nil {
+		log.Fatalf("Could not parse -max-size: %s", err.Error())
+	}
+	return int(math.Floor(math.Min(float64(v), float64(maxInt))))
+}
+
 func init() {
+	flag.StringVar(&smtpMaxSize, "max-size", "12M", "Maximum message size")
 	flag.BoolVar(&migrate, "migrate", false, "rather migrate")
 	flag.StringVar(&siteName, "name", "log", "A name for the root link")
 	flag.StringVar(&configFile, "config", "config.json", "configuration file")

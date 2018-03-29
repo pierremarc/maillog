@@ -143,6 +143,7 @@ func ListenAndServe(addr string, handler smtpd.Handler, rcpt smtpd.HandlerRcpt) 
 		Addr:        addr,
 		Handler:     handler,
 		HandlerRcpt: rcpt,
+		MaxSize:     GetMaxSize(),
 		Appname:     GetSiteName(),
 		Hostname:    GetSiteName(),
 	}

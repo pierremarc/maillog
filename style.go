@@ -1,8 +1,7 @@
-package main 
+package main
 
-const StyleSheet = `
 
-/* http://meyerweb.com/eric/tools/css/reset/ 
+const CssReset = `/* http://meyerweb.com/eric/tools/css/reset/ 
    v2.0 | 20110126
    License: none (public domain)
 */
@@ -49,11 +48,9 @@ q:before, q:after {
 table {
 	border-collapse: collapse;
 	border-spacing: 0;
-}
+}`
 
-/* end of reset */
-
-
+const CssStyle = `
 body {
     font-family: sans-serif;
     width: 90%;
@@ -196,6 +193,5 @@ span.message-item-ts {
 
 p.body-par {
     line-height: 140%;
-}
+}`
 
-` // end of stylesheet

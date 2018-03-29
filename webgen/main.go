@@ -1,13 +1,3 @@
-// Optional is a tool that generates 'optional' type wrappers around a given type T.
-//
-// Typically this process would be run using go generate, like this:
-//
-//	//go:generate optional -type=Foo
-//
-// running this command
-//
-//	optional -type=Foo
-//
 package main
 
 import (
@@ -16,7 +6,6 @@ import (
 	"go/build"
 	"io/ioutil"
 	"log"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -26,10 +15,11 @@ import (
 
 type generator struct {
 	packageName string
-	queries     []string
+	prefix      string
+	what        string
 }
 
-func queryName(n string) string {
+func varName(n string) string {
 	basename := strings.Split(n, ".")[0]
 	parts := strings.Split(basename, "-")
 	name := ""
@@ -39,36 +29,35 @@ func queryName(n string) string {
 	return name
 }
 
-type queryMap map[string]string
+type fileMap map[string]string
 
 func (g *generator) generate() ([]byte, error) {
-	templatePath := path.Join(os.Getenv("GOPATH"),
-		"src/github.com/pierremarc/maillog",
-		"sql_gen/queries.tpl")
-	var queries = make(queryMap)
+	var files = make(fileMap)
+	templatePath := path.Join(".", g.what+".tpl")
+	rootPath := path.Join(".", g.what)
+	globPat := "/*." + g.what
+
 	tb, _ := ioutil.ReadFile(templatePath)
-	t := template.Must(template.New("sql").Parse(string(tb)))
+	t := template.Must(template.New(g.what).Parse(string(tb)))
 
-	rootPath := path.Join(os.Getenv("GOPATH"),
-		"src/github.com/pierremarc/maillog/sql_gen/sql")
+	log.Printf("Looking for files matching `%s`", rootPath+globPat)
+	fileNames, _ := filepath.Glob(rootPath + globPat)
 
-	log.Printf("Looking for sql files in %s", rootPath)
-
-	sqlfiles, _ := filepath.Glob(rootPath + "/*.sql")
-
-	for _, fn := range sqlfiles {
-		qn := queryName(filepath.Base(fn))
+	for _, fn := range fileNames {
+		qn := varName(filepath.Base(fn))
 		log.Printf("Got %s in %s", qn, fn)
 		bs, _ := ioutil.ReadFile(fn)
-		queries[qn] = string(bs)
+		files[qn] = string(bs)
 	}
 
 	data := struct {
 		Timestamp time.Time
-		Queries   queryMap
+		Prefix    string
+		Files     fileMap
 	}{
 		time.Now().UTC(),
-		queries,
+		g.prefix,
+		files,
 	}
 	var buf bytes.Buffer
 	err := t.Execute(&buf, data)
@@ -83,7 +72,9 @@ func main() {
 	log.SetFlags(0)
 	log.SetPrefix("option: ")
 
-	outputName := flag.String("output", "queries.go", "output file name")
+	outputName := flag.String("output", "queries.go", "Output file name")
+	what := flag.String("what", "", "What - will build template name (what.tpl), dirpath (./what/) and glob pattern (*.what)")
+	prefix := flag.String("prefix", "", "Variable name prefix")
 
 	flag.Parse()
 
@@ -96,8 +87,15 @@ func main() {
 		g generator
 	)
 
-	g.queries = flag.Args()
+	// g.queries = flag.Args()
+	g.what = *what
 	g.packageName = pkg.Name
+
+	if *prefix != "" {
+		g.prefix = *prefix
+	} else {
+		g.prefix = strings.Title(*what)
+	}
 
 	src, err := g.generate()
 	if err != nil {

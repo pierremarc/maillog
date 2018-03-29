@@ -44,7 +44,8 @@ func makeDocument() document {
 	doc.head.Append(HeadMeta(NewAttr().
 		Set("name", "viewport").
 		Set("content", "width=device-width, initial-scale=1.0")))
-	doc.head.Append(Style(NewAttr(), Text(StyleSheet)))
+	doc.head.Append(Style(NewAttr(), Text(CssReset)))
+	doc.head.Append(Style(NewAttr(), Text(CssStyle)))
 	return doc
 }
 
