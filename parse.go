@@ -124,7 +124,6 @@ func walkPartSync(r io.Reader, boundary string, parts *[]SerializedPart) {
 		}
 
 		contentType := part.Header.Get(HeaderContentType)
-		// cte := part.Header.Get(HeaderContentTranferEncoding)
 		mediatype, params, err := mime.ParseMediaType(contentType)
 		if err != nil {
 			log.Printf("Err on ParseMediaType %s", err.Error())
@@ -137,17 +136,6 @@ func walkPartSync(r io.Reader, boundary string, parts *[]SerializedPart) {
 			newBoundary := params["boundary"]
 			walkPartSync(part, newBoundary, &sp.children)
 		}
-		// } else {
-		// 	bs, _ := ioutil.ReadAll(part)
-		// 	log.Println("BS", bs)
-		// 	ResultSByteFrom(ioutil.ReadAll(part)).
-		// 		FoldF(
-		// 			func(error) { log.Printf("Failed to read body (%s) (%s)", mediatype, cte) },
-		// 			func(body []byte) {
-		// 				log.Printf("Success to read body (%s) (%s)\n<<\n%s\n>>", mediatype, cte, body)
-		// 				sp.content = body
-		// 			})
-		// }
 		part.Close()
 	}
 }

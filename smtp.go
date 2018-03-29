@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/mhale/smtpd"
+	"github.com/pierremarc/smtpd"
 )
 
 type ErrorT struct {
@@ -25,45 +23,6 @@ func makeError(reason string) ErrorT {
 		Time:   time.Now(),
 		Reason: reason,
 	}
-}
-
-func getRecipent(to []string) OptionString {
-	if len(to) > 0 {
-		addr := to[0]
-		parts := strings.Split(addr, "@")
-		return SomeString(parts[0])
-	}
-	return NoneString()
-}
-
-func getDomain(to []string) OptionString {
-	if len(to) > 0 {
-		addr := to[0]
-		parts := strings.Split(addr, "@")
-		if len(parts) > 1 {
-			return SomeString(parts[1])
-		}
-	}
-	return NoneString()
-}
-
-func getTopic(recipient string) OptionString {
-	parts := strings.Split(recipient, "+")
-	if len(parts) > 0 {
-		return SomeString(parts[0])
-	}
-	return NoneString()
-}
-
-func getAnswer(topic string) OptionUInt64 {
-	parts := strings.Split(topic, "+")
-	if len(parts) > 1 {
-		i, err := strconv.ParseUint(parts[1], 10, 32)
-		if err == nil {
-			return SomeUInt64(i)
-		}
-	}
-	return NoneUInt64()
 }
 
 func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
@@ -89,7 +48,7 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 			)
 
 			sender = from
-			domain = getDomain(to).FoldString("", IdString)
+			domain = getDomains(to).First().FoldString("", IdString)
 			topic = getTopic(recipient).FoldString("na", IdString)
 
 			getAnswer(recipient).FoldF(
@@ -114,6 +73,7 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 						Root().
 						Walk(func(p SerializedPart) {
 							if p != nil {
+								log.Printf("Part (%s)", p.MediaType())
 								if "text/plain" == p.MediaType() {
 									body += p.ContentString()
 								} else {
@@ -138,7 +98,11 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 							func(r bool) { log.Printf("Recorded %d", id) })
 
 					for _, at := range attachments {
-						v.Write(WriteOptions{encodedSender(sender), topic, id, at.FileName(), at.DecodedContent()}).
+						fn := at.FileName()
+						if "text/html" == at.MediaType() {
+							fn = fmt.Sprintf("%d.html", time.Now().Nanosecond())
+						}
+						v.Write(WriteOptions{encodedSender(sender), topic, id, fn, at.DecodedContent()}).
 							Map(func(fn string) {
 								store.QueryFunc(QueryInsertAttachment,
 									id, at.ContentType(), fn).Exec()
@@ -155,8 +119,39 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 	}
 }
 
+func makeHandlerRcpt(store Store) smtpd.HandlerRcpt {
+	return func(remoteAddr net.Addr, from string, to string) bool {
+		var (
+			domain = getDomain(to)
+			accept = false
+			id     int
+		)
+
+		q := store.QueryFunc(QuerySelectDomainMx, domain)
+		log.Printf("<<RCPT `%s`", domain)
+		q(RowCallback(func() {
+			log.Printf("GOT>> `%d`", id)
+			accept = true
+		}), &id)
+
+		return accept
+	}
+}
+
+func ListenAndServe(addr string, handler smtpd.Handler, rcpt smtpd.HandlerRcpt) error {
+	srv := &smtpd.Server{
+		Addr:        addr,
+		Handler:     handler,
+		HandlerRcpt: rcpt,
+		Appname:     GetSiteName(),
+		Hostname:    GetSiteName(),
+	}
+	return srv.ListenAndServe()
+}
+
 func StartSMTP(cont chan string, iface string, store Store, v Volume) {
 	handler := makeHandler(cont, store, v)
+	rcpt := makeHandlerRcpt(store)
 	cont <- fmt.Sprintf("SMTPD ready on %s", iface)
-	smtpd.ListenAndServe(iface, handler, "MailLog", "Wow")
+	ListenAndServe(iface, handler, rcpt)
 }

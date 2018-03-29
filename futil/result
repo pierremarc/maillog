@@ -2,7 +2,9 @@
 package {{ .PackageName }}
 
 // imports 
-import ( {{ range $_, $package := .Imports }}
+import (
+	"errors"
+{{ range $_, $package := .Imports }}
 	"{{ $package }}"
 {{ end }} )
 {{$Types := .Types}}

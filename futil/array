@@ -2,7 +2,8 @@
 package {{ .PackageName }}
 
 // imports 
-import ( {{ range $_, $package := .Imports }}
+import (
+{{ range $_, $package := .Imports }}
 	"{{ $package }}"
 {{ end }} )
 
@@ -11,6 +12,7 @@ import ( {{ range $_, $package := .Imports }}
 {{ range $label, $type := $Types }}
 // {{ $label }}
 type Array{{ $label }} interface {
+	First() Result{{$label}}
 	Slice() array{{$label}}
 	Each(func({{ $type }}))
 	Concat(Array{{$label}}) Array{{$label}}
@@ -31,6 +33,14 @@ type array{{ $label }} []{{$type}}
 func NewArray{{$label}}(a ...{{$type}})Array{{$label}} {
 	return array{{$label}}(a)
 }
+
+func (a array{{$label}}) First() Result{{$label}} {
+	if len(a) > 0 {
+		return Ok{{$label}}(a[0])
+	}
+	return Err{{$label}}("Out Of Bound Array Access")
+}
+
 
 func (a array{{$label}}) Slice() array{{$label}} {
 	return a
