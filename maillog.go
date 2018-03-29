@@ -3,6 +3,7 @@
 //go:generate futil -type array   Int=int String=string Node=Node
 //go:generate webgen -output queries.go -what sql -prefix Query
 //go:generate webgen -output style.go -what css
+//go:generate webgen -output js.go -what js
 package main
 
 import (
@@ -67,13 +68,14 @@ func main() {
 	vroot := GetVolume(configFile)
 	store := NewStore(dbc, tabs)
 	volume := NewVolume(vroot)
+	notif := NewNotifier()
 	RegisterQueries(store)
 	if migrate {
 		MakeMigration(store, volume)
 	} else {
 		cont := make(chan string)
-		go StartSMTP(cont, smtpdI, store, volume)
-		go StartHTTP(cont, httpdI, store, volume)
+		go StartSMTP(cont, smtpdI, store, volume, notif)
+		go StartHTTP(cont, httpdI, store, volume, notif)
 		// go profiler()
 		controller(cont)
 	}

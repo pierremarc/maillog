@@ -25,7 +25,7 @@ func makeError(reason string) ErrorT {
 	}
 }
 
-func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
+func makeHandler(cont chan string, store Store, v Volume, n *Notifier) smtpd.Handler {
 
 	return func(origin net.Addr, from string, to []string, data []byte) {
 
@@ -109,6 +109,10 @@ func makeHandler(cont chan string, store Store, v Volume) smtpd.Handler {
 							})
 					}
 
+					if parent > 0 {
+						n.Notify(parent)
+					}
+
 					return fmt.Sprintf("Received [%s] => [%s]: %s",
 						from, recipient, subjectHeader)
 				}).
@@ -150,8 +154,8 @@ func ListenAndServe(addr string, handler smtpd.Handler, rcpt smtpd.HandlerRcpt) 
 	return srv.ListenAndServe()
 }
 
-func StartSMTP(cont chan string, iface string, store Store, v Volume) {
-	handler := makeHandler(cont, store, v)
+func StartSMTP(cont chan string, iface string, store Store, v Volume, n *Notifier) {
+	handler := makeHandler(cont, store, v, n)
 	rcpt := makeHandlerRcpt(store)
 	cont <- fmt.Sprintf("SMTPD ready on %s", iface)
 	ListenAndServe(iface, handler, rcpt)

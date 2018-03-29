@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"flag"
 	"go/build"
 	"io/ioutil"
@@ -19,6 +20,14 @@ type generator struct {
 	what        string
 }
 
+var (
+	funcMap = template.FuncMap{
+		"base64": func(s string) string {
+			return base64.StdEncoding.EncodeToString([]byte(s))
+		},
+	}
+)
+
 func varName(n string) string {
 	basename := strings.Split(n, ".")[0]
 	parts := strings.Split(basename, "-")
@@ -31,6 +40,10 @@ func varName(n string) string {
 
 type fileMap map[string]string
 
+// func encodeContent(input []byte) string {
+// 	return base64.StdEncoding.EncodeToString(input)
+// }
+
 func (g *generator) generate() ([]byte, error) {
 	var files = make(fileMap)
 	templatePath := path.Join(".", g.what+".tpl")
@@ -38,7 +51,9 @@ func (g *generator) generate() ([]byte, error) {
 	globPat := "/*." + g.what
 
 	tb, _ := ioutil.ReadFile(templatePath)
-	t := template.Must(template.New(g.what).Parse(string(tb)))
+	nt := template.New(g.what)
+	nt.Funcs(funcMap)
+	t := template.Must(nt.Parse(string(tb)))
 
 	log.Printf("Looking for files matching `%s`", rootPath+globPat)
 	fileNames, _ := filepath.Glob(rootPath + globPat)

@@ -153,6 +153,7 @@ var (
 	Pre       = factory("PRE")
 	Img       = factory("IMG")
 	Style     = factory("STYLE")
+	Script    = factory("SCRIPT")
 	HeadLink  = factory("LINK")
 	HeadMeta  = factory("META")
 )

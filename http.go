@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/pgtype"
 	"github.com/labstack/echo"
+	"golang.org/x/net/websocket"
 )
 
 func link(href string, label string) Node {
@@ -46,6 +47,7 @@ func makeDocument() document {
 		Set("content", "width=device-width, initial-scale=1.0")))
 	doc.head.Append(Style(NewAttr(), Text(CssReset)))
 	doc.head.Append(Style(NewAttr(), Text(CssStyle)))
+	doc.head.Append(Script(NewAttr(), Text(JsBundle)))
 	return doc
 }
 
@@ -163,7 +165,8 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	root := Div(ClassAttr(fmt.Sprintf("answer depth-%v", depth)))
 
 	return qm(RowCallback(func() {
-		block := Div(ClassAttr("answer-block"))
+		block := Div(
+			ClassAttr("answer-block").Set("data-record", strconv.Itoa(id)))
 		block.Append(
 			Div(ClassAttr("answer-header-block"),
 				H2(ClassAttr("answer-subject"),
@@ -253,7 +256,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 			attachments []attachmentRecord
 		)
 
-		block := Div(ClassAttr("message-block"))
+		block := Div(ClassAttr("message-block").Set("data-record", paramId))
 		attBlock := Div(ClassAttr("attachment-block"))
 
 		return qm(RowCallback(func() {
@@ -333,16 +336,59 @@ func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
 	app.GET("/attachments/:sender/:topic/:id/:name", handler)
 }
 
-func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string) {
+func notifyHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
+	handler := func(c echo.Context) error {
+		websocket.Handler(func(ws *websocket.Conn) {
+			defer ws.Close()
+			n.Subscribe(func(i interface{}) {
+				switch i.(type) {
+				case int:
+					websocket.Message.Send(ws,
+						fmt.Sprintf("{\"record\": %d}", i.(int)))
+				}
+			})
+
+			for {
+				msg := ""
+				err := websocket.Message.Receive(ws, &msg)
+				if err != nil {
+					break
+				}
+				log.Printf("websocket: %s", msg)
+			}
+			// for {
+			// 	// Write
+			// 	err := websocket.Message.Send(ws, "HELO")
+			// 	if err != nil {
+			// 		c.Logger().Error(err)
+			// 	}
+
+			// 	// Read
+			// 	msg := ""
+			// 	err = websocket.Message.Receive(ws, &msg)
+			// 	if err != nil {
+			// 		c.Logger().Error(err)
+			// 	}
+			// 	fmt.Printf("%s\n", msg)
+			// }
+		}).ServeHTTP(c.Response(), c.Request())
+
+		return nil
+	}
+	app.GET("/.notifications", handler)
+}
+
+func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
+	notifyHandler(app, store, v, cont, n)
 	listTopics(app, store, v, cont)
 	listInTopics(app, store, v, cont)
 	showMessage(app, store, v, cont)
 	showAttachment(app, store, v, cont)
 }
 
-func StartHTTP(cont chan string, iface string, store Store, v Volume) {
+func StartHTTP(cont chan string, iface string, store Store, v Volume, n *Notifier) {
 	app := echo.New()
-	regHTTPHandlers(app, store, v, cont)
+	regHTTPHandlers(app, store, v, cont, n)
 	cont <- fmt.Sprintf("HTTP ready on %s", iface)
 	app.Start(iface)
 }
