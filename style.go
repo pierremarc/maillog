@@ -192,7 +192,7 @@ span.message-item-ts {
     color: #9E9E9E;
 }
 
-p.body-par {
+.message-body,.answer-body p {
     line-height: 140%;
 }
 
