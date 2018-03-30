@@ -7,6 +7,8 @@ const QueryInsertRecord = "InsertRecord"
 
 const QueryInsertRecordParent = "InsertRecordParent"
 
+const QuerySelectAllPayloads = "SelectAllPayloads"
+
 const QuerySelectAnswerids = "SelectAnswerids"
 
 const QuerySelectAnswers = "SelectAnswers"
@@ -28,6 +30,8 @@ const QuerySelectRecord = "SelectRecord"
 const QuerySelectRecords = "SelectRecords"
 
 const QuerySelectTopics = "SelectTopics"
+
+const QueryTruncateAttachments = "TruncateAttachments"
 
 
 func RegisterQueries(store Store) {
@@ -71,6 +75,10 @@ INSERT INTO {{.Records}}
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id`)
+	
+	store.Register(QuerySelectAllPayloads, `SELECT  
+    id, sender, topic, payload
+FROM {{.Records}}`)
 	
 	store.Register(QuerySelectAnswerids, `-- answer ids
 SELECT id, sender
@@ -146,5 +154,8 @@ WHERE
     AND strpos(topic, '_') <> 1
 GROUP BY topic
 ORDER BY topic ASC`)
+	
+	store.Register(QueryTruncateAttachments, `-- truncate attachments table (generally before regenerating with sedd option)
+TRUNCATE TABLE {{.Attachments}};`)
 	
 }

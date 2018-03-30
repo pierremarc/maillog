@@ -23,7 +23,7 @@ var (
 	configFile  string
 	smtpdI      string
 	httpdI      string
-	migrate     bool
+	seed        bool
 	siteName    string
 	smtpMaxSize string
 )
@@ -42,8 +42,8 @@ func GetMaxSize() int {
 }
 
 func init() {
+	flag.BoolVar(&seed, "seed", false, "Regenerate attacments")
 	flag.StringVar(&smtpMaxSize, "max-size", "12M", "Maximum message size")
-	flag.BoolVar(&migrate, "migrate", false, "rather migrate")
 	flag.StringVar(&siteName, "name", "log", "A name for the root link")
 	flag.StringVar(&configFile, "config", "config.json", "configuration file")
 	flag.StringVar(&smtpdI, "smtp", "0.0.0.0:2525", "interface for smtpd")
@@ -70,8 +70,8 @@ func main() {
 	volume := NewVolume(vroot)
 	notif := NewNotifier()
 	RegisterQueries(store)
-	if migrate {
-		MakeMigration(store, volume)
+	if seed {
+		SeedAttachments(store, volume)
 	} else {
 		cont := make(chan string)
 		go StartSMTP(cont, smtpdI, store, volume, notif)
