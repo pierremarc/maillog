@@ -160,8 +160,7 @@ func WithRows(rows *pgx.Rows, cb rowsCb, args ...interface{}) {
 	for rows.Next() {
 		scanError := rows.Scan(args...)
 		if scanError != nil {
-			errMesg := scanError.Error()
-			log.Printf("Error [WithRows] %s", errMesg)
+			log.Printf("Error [WithRows] %s", scanError.Error())
 		} else {
 			cb(args...)
 		}

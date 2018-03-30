@@ -109,9 +109,7 @@ func makeHandler(cont chan string, store Store, v Volume, n *Notifier) smtpd.Han
 							})
 					}
 
-					if parent > 0 {
-						n.Notify(parent)
-					}
+					n.Notify(MakeNotification(topic, id, parent))
 
 					return fmt.Sprintf("Received [%s] => [%s]: %s",
 						from, recipient, subjectHeader)

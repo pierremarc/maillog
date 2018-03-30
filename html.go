@@ -182,9 +182,9 @@ func (doc document) Render() string {
 	return fmt.Sprintf("%s\n%s", dc, htmlNode.Render())
 }
 
-func NewDoc() document {
+func NewDoc(attrs attributes) document {
 	return document{
 		head: createNode("HEAD", NewAttr()),
-		body: createNode("BODY", NewAttr()),
+		body: createNode("BODY", attrs),
 	}
 }

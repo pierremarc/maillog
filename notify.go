@@ -1,15 +1,25 @@
 package main
 
-type Receiver func(i interface{})
+type Receiver func(Notification)
+
+type Notification struct {
+	Topic  string `json:"topic"`
+	Record int    `json:"record"`
+	Parent int    `json:"parent"`
+}
+
+func MakeNotification(t string, r int, p int) Notification {
+	return Notification{t, r, p}
+}
 
 type Notifier struct {
-	source  chan interface{}
+	source  chan Notification
 	clients []Receiver
 }
 
 func NewNotifier() *Notifier {
 	clients := make([]Receiver, 0)
-	source := make(chan interface{})
+	source := make(chan Notification)
 	n := Notifier{source, clients}
 	go func() {
 		for i := range source {
@@ -22,8 +32,8 @@ func NewNotifier() *Notifier {
 	return &n
 }
 
-func (b *Notifier) Notify(i interface{}) {
-	b.source <- i
+func (b *Notifier) Notify(n Notification) {
+	b.source <- n
 }
 
 func (b *Notifier) Subscribe(r Receiver) int {

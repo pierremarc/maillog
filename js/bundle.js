@@ -1,23 +1,45 @@
-(function () {
+function start() {
     const loc = window.location
     const isSecure = loc.protocol === 'https:'
 
-    const reload = document.createElement('div')
-    reload.setAttribute('class', 'reloader')
-    const link = document.createElement('a')
-    link.setAttribute('href', loc.href)
-    link.appendChild(document.createTextNode("New message on this thread, click to reload"))
-    reload.appendChild(link)
+    const page = document.body.getAttribute("data-page")
+
+
+    function reloader(msg) {
+        const reload = document.createElement('div')
+        reload.setAttribute('class', 'reloader')
+        const reloadInner = document.createElement('div')
+        reloadInner.setAttribute('class', 'reloader-inner')
+        const link = document.createElement('a')
+        link.setAttribute('href', loc.href)
+        link.appendChild(document.createTextNode(msg))
+        reloadInner.appendChild(link)
+        reload.appendChild(reloadInner)
+        document.body.appendChild(reload)
+    }
 
     function checkUpdate(data) {
-        const rid = data.record.toString()
-        const recs = document.querySelectorAll("[data-record]")
-        for (let i = 0; i < recs.length; i++) {
-            const e = recs[i];
-            const id = e.getAttribute('data-record')
-            if (rid === id) {
-                // const h = document.querySelector('.header')
-                document.body.appendChild(reload)
+        if ('thread' === page) {
+            const recs = document.querySelectorAll("[data-topic]")
+            for (let i = 0; i < recs.length; i++) {
+                const e = recs[i];
+                const topic = e.getAttribute('data-topic')
+                if (topic === data.topic) {
+                    reloader(`Ther's a new message in ${data.topic}, click to reload`)
+                }
+            }
+        }
+        else if ('message' === page) {
+            const rid = data.parent.toString()
+            const recs = document.querySelectorAll("[data-record]")
+            for (let i = 0; i < recs.length; i++) {
+                const e = recs[i];
+                const id = e.getAttribute('data-record')
+                if (rid === id) {
+                    reloader(`There's a new message in this thread, click to reload`)
+                    const previousClass = e.getAttribute('class')
+                    e.setAttribute('class', previousClass + ' new-reply')
+                }
             }
         }
     }
@@ -43,5 +65,13 @@
         });
     }
 
+
     connect()
-})()
+}
+
+
+document.onreadystatechange = function () {
+    if ('interactive' === document.readyState) {
+        start();
+    }
+};

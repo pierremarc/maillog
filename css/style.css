@@ -23,9 +23,7 @@ body > div.header > h1.title {
 }
 
 body > div.header > div.bc-block {
-        position: absolute;
-    top: 0;
-    right: 0;
+
 }
 
 body > div.header > div.bc-block > div.bc {
@@ -97,10 +95,13 @@ div.answer-block > div.answer-header-block {
     margin-bottom: 0.5em;
 }
 
-div.answer-header-block > a.answer-link {
-    position: absolute;
-    top: 0;
-    right: 0;
+.answer-link {
+/* margin-top: .3em; */
+}
+
+.answer-link a.link {
+    color:#2196f3;
+    font-size: 80%;
 }
 
 div.answer.depth-2 { margin-left: 1em; }
@@ -144,17 +145,41 @@ p.body-par {
 }
 
 .reloader {
-        padding: 12px;
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: 2em;
+    height: auto;
     text-align: center;
 }
-.reloader a{
+
+.reloader-inner {
     background-color: rgb(243, 239, 239);
+        padding: 12px;
+}
+.reloader a{
     font-size: 90%;
     font-weight: bold;
     color: #0d6903;
+}
+
+
+.topic-replyto-block {
+    font-size: 80%;
+    line-height: 120%;
+    margin-bottom: 1em;
+    border-bottom: 0.5px solid black;
+    padding-bottom: 1em;
+}
+
+.first-subject {
+    font-style: italic;
+    color: black;
+}
+.first-subject:hover{
+    color: grey;
+}
+
+.new-reply {
+    background-color: #ffefbf;
 }

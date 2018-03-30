@@ -23,9 +23,13 @@ func link0(href string) Node {
 	return link(href, href)
 }
 
-func header(title string, args ...string) Node {
+func rootHeader(c echo.Context) Node {
+	return Div(ClassAttr("header"), H1(ClassAttr("title"), Text(getHostDomain(c))))
+}
+
+func header(c echo.Context, title string, args ...string) Node {
 	r := Div(ClassAttr("header"))
-	bc := Div(ClassAttr("bc"), link("/", "/"+GetSiteName()))
+	bc := Div(ClassAttr("bc"), link("/", "/"+getHostDomain(c)))
 	u := ""
 	for i := 0; i < len(args); i++ {
 		part := "/" + args[i]
@@ -39,8 +43,8 @@ func header(title string, args ...string) Node {
 	return r
 }
 
-func makeDocument() document {
-	doc := NewDoc()
+func makeDocument(page string) document {
+	doc := NewDoc(NewAttr().Set("data-page", page))
 	doc.head.Append(HeadMeta(NewAttr().Set("charset", "utf-8")))
 	doc.head.Append(HeadMeta(NewAttr().
 		Set("name", "viewport").
@@ -55,7 +59,7 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 
 	app.GET("/", func(c echo.Context) error {
 		log.Printf("List Topics(%s)", getHostDomain(c))
-		var doc = makeDocument()
+		var doc = makeDocument("root")
 		q := store.QueryFunc(QuerySelectTopics, getHostDomain(c))
 		var (
 			topic string
@@ -63,14 +67,14 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 			mts   pgtype.Timestamp
 		)
 
-		doc.body.Append(header("Topics"))
+		doc.body.Append(rootHeader(c))
 		attrs := ClassAttr("topic")
 
 		return q(RowCallback(func() {
 			doc.body.Append(Div(attrs,
 				A(ClassAttr("topic-link link").Set("href", "/"+topic),
 					Text(topic)),
-				Span(ClassAttr("topic-count"), Textf("(%d messages),", count)),
+				Span(ClassAttr("topic-count"), Textf("(%d),", count)),
 				Span(ClassAttr("topic-ts"), Textf("(last update: %s)", formatTimestamp(mts.Time)))))
 		}), &topic, &count, &mts).
 			FoldErrorF(
@@ -104,7 +108,9 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 		paramTopic := c.Param("topic")
 		q := store.QueryFunc(QuerySelectIntopic,
 			getHostDomain(c), paramTopic)
-		var doc = makeDocument()
+		qf := store.QueryFunc(QuerySelectFirstRecord,
+			getHostDomain(c), paramTopic)
+		var doc = makeDocument("thread")
 		var (
 			id      int
 			ts      pgtype.Timestamptz
@@ -112,13 +118,30 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 			subject string
 		)
 
-		doc.body.Append(header(paramTopic, paramTopic))
-		attrs := ClassAttr("message-item")
+		qf.Exec(&id, &ts, &sender, &subject)
+
+		doc.body.Append(header(c, paramTopic, paramTopic))
+
+		replyto := fmt.Sprintf("mailto:%s@%s", paramTopic, getHostDomain(c))
+		firstUrl := fmt.Sprintf("/%s/%d", paramTopic, id)
+		intro := P(ClassAttr("topic-replyto-description"),
+			Textf(`
+			This thread started with a message from %s on %s.
+			The subject of it was `,
+				senderName(sender), formatTimeDate(ts.Time)),
+			A(ClassAttr("first-subject").Set("href", firstUrl),
+				Text(decodeSubject(subject))),
+			Text(". Send a message to this thread at the following address: "),
+			A(ClassAttr("link").Set("href", replyto),
+				Textf("%s@%s", paramTopic, getHostDomain(c))))
+
+		doc.body.Append(
+			Div(ClassAttr("topic-replyto-block").Set("data-topic", paramTopic), intro))
 
 		return q(RowCallback(func() {
-			url := fmt.Sprintf("/%s/%v", paramTopic, id)
+			url := fmt.Sprintf("/%s/%d", paramTopic, id)
 
-			doc.body.Append(Div(attrs,
+			doc.body.Append(Div(ClassAttr("message-item"),
 				A(ClassAttr("message-link link").Set("href", url),
 					Text(ensureSubject(subject))),
 				Span(ClassAttr("message-item-sender"), Text(senderName(sender))),
@@ -136,6 +159,15 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 	app.GET("/:topic", handler)
 }
 
+func replyBlock(c echo.Context, topic string, id int, subject string) Node {
+	replySubject := fmt.Sprintf("Re: %s/%s", topic, decodeSubject(subject))
+	replyto := fmt.Sprintf("mailto:%s+%d@%s?subject=%s",
+		topic, id, getHostDomain(c), replySubject)
+
+	return Div(ClassAttr("answer-link"),
+		A(ClassAttr("link").Set("href", replyto), Text("reply")))
+}
+
 func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	var (
 		id          int
@@ -148,6 +180,7 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 		parent      pgtype.Int4
 		contentType string
 		fileName    string
+		hasAnswer   = false
 	)
 
 	qi := store.QueryFunc(QuerySelectAnswerids, pid)
@@ -165,18 +198,18 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	root := Div(ClassAttr(fmt.Sprintf("answer depth-%v", depth)))
 
 	return qm(RowCallback(func() {
+		hasAnswer = true
+		url := fmt.Sprintf("/%s/%v", topic, id)
+
 		block := Div(
 			ClassAttr("answer-block").Set("data-record", strconv.Itoa(id)))
 		block.Append(
 			Div(ClassAttr("answer-header-block"),
 				H2(ClassAttr("answer-subject"),
 					A(ClassAttr("link").
-						Set("href", fmt.Sprintf("/%s/%v", topic, id)),
+						Set("href", url),
 						Text(senderName(sender)))),
-				A(ClassAttr("answer-link link").
-					Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%s",
-						topic, id, getHostDomain(c), topic, pid)),
-					Text("reply"))),
+				replyBlock(c, topic, id, subject)),
 			Div(ClassAttr("answer-body"), NewRawNode(body)), nas[id])
 		root.Append(block, formatAnswers(strconv.Itoa(id), store, c, depth+1))
 	}), &id, &ts, &sender, &topic, &subject, &body, &parent).
@@ -202,7 +235,10 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 					attBlock.Append(formatAttachments(attachments))
 					attachments = []attachmentRecord{}
 				}
-				return root
+				if hasAnswer {
+					return root
+				}
+				return NoDisplay
 			})
 }
 
@@ -242,7 +278,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 		paramTopic := c.Param("topic")
 		qm := store.QueryFunc(QuerySelectRecord, paramId)
 		qa := store.QueryFunc(QuerySelectAttachments, paramId)
-		var doc = makeDocument()
+		var doc = makeDocument("message")
 		var (
 			id          int
 			ts          pgtype.Timestamptz
@@ -271,16 +307,14 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 			block.Append(
 				Div(ClassAttr("message-header"),
 					Span(ClassAttr("message-sender"),
-						Text(fmt.Sprintf("%s - %s", senderName(sender), ts.Time))),
+						Text(fmt.Sprintf("%s — %s", senderName(sender), formatTime(ts.Time)))),
 					pnode,
-					A(ClassAttr("link").
-						Set("href", fmt.Sprintf("mailto:%s+%v@%s?subject=Re:%s/%d", paramTopic, id, getHostDomain(c), topic, id)),
-						Text("reply"))),
+					replyBlock(c, paramTopic, id, subject)),
 				Div(ClassAttr("message-body"), NewRawNode(body)),
 				attBlock)
 
 			doc.body.Append(
-				header(ensureSubject(subject), paramTopic, paramId),
+				header(c, ensureSubject(subject), paramTopic, paramId),
 				block, formatAnswers(paramId, store, c, 1))
 		}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 			FoldErrorF(
@@ -340,12 +374,9 @@ func notifyHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *N
 	handler := func(c echo.Context) error {
 		websocket.Handler(func(ws *websocket.Conn) {
 			defer ws.Close()
-			sub := n.Subscribe(func(i interface{}) {
-				switch i.(type) {
-				case int:
-					websocket.Message.Send(ws,
-						fmt.Sprintf("{\"record\": %d}", i.(int)))
-				}
+			sub := n.Subscribe(func(n Notification) {
+				log.Printf("Notification %v", n)
+				websocket.JSON.Send(ws, n)
 			})
 			defer n.Unsubscribe(sub)
 
@@ -357,21 +388,6 @@ func notifyHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *N
 				}
 				log.Printf("websocket: %s", msg)
 			}
-			// for {
-			// 	// Write
-			// 	err := websocket.Message.Send(ws, "HELO")
-			// 	if err != nil {
-			// 		c.Logger().Error(err)
-			// 	}
-
-			// 	// Read
-			// 	msg := ""
-			// 	err = websocket.Message.Receive(ws, &msg)
-			// 	if err != nil {
-			// 		c.Logger().Error(err)
-			// 	}
-			// 	fmt.Printf("%s\n", msg)
-			// }
 		}).ServeHTTP(c.Response(), c.Request())
 
 		return nil

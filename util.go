@@ -6,6 +6,7 @@ import (
 	"mime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo"
 )
@@ -28,6 +29,17 @@ func decodeSubject(s string) string {
 		}
 	}
 	return s
+}
+
+func formatTimeDate(t time.Time) string {
+	y, m, d := t.Date()
+	return fmt.Sprintf("%d-%d-%d", y, m, d)
+}
+
+func formatTime(t time.Time) string {
+	y, mo, d := t.Date()
+	h, mi, _ := t.Clock()
+	return fmt.Sprintf("%d-%d-%d %02d:%02d", y, mo, d, h, mi)
 }
 
 func getHostDomain(c echo.Context) string {

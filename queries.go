@@ -19,6 +19,8 @@ const QuerySelectDomainMx = "SelectDomainMx"
 
 const QuerySelectDomains = "SelectDomains"
 
+const QuerySelectFirstRecord = "SelectFirstRecord"
+
 const QuerySelectIntopic = "SelectIntopic"
 
 const QuerySelectRecord = "SelectRecord"
@@ -102,6 +104,15 @@ WHERE mx_name = $1`)
 	store.Register(QuerySelectDomains, `SELECT 
     http_name, mx_name
 FROM {{.Domains}}`)
+	
+	store.Register(QuerySelectFirstRecord, `SELECT  
+    id, ts, sender, header_subject 
+FROM {{.Records}} 
+WHERE
+    domain = $1
+    AND topic = $2
+ORDER BY ts  ASC
+LIMIT 1`)
 	
 	store.Register(QuerySelectIntopic, `SELECT id, ts, sender, header_subject
 FROM {{.Records}}  
