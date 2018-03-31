@@ -422,17 +422,16 @@ func notifyHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *N
 	app.GET("/.notifications", handler)
 }
 
-func yesterday() string {
-	y := time.Now().Add(-24 * time.Hour)
+func lastweek() string {
+	y := time.Now().Add(-24 * 7 * time.Hour)
 	yy, my, dy := y.Date()
-	log.Printf("Yesterday %d-%02d-%02d", yy, my, dy)
 	return fmt.Sprintf("%d-%02d-%02d", yy, my, dy)
 }
 
 func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
 	handler := func(c echo.Context) error {
 		paramTopic := c.Param("topic")
-		q := store.QueryFunc(QuerySelectRecordsSince, getHostDomain(c), paramTopic, yesterday())
+		q := store.QueryFunc(QuerySelectRecordsTopicSince, getHostDomain(c), paramTopic, lastweek())
 
 		var (
 			id            int
@@ -465,6 +464,43 @@ func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Noti
 		c.Response().Header().Set(echo.HeaderContentType, "application/rss+xml; charset=UTF-8")
 		return c.String(http.StatusOK, RenderRss(rss))
 	}
+
+	handlerAll := func(c echo.Context) error {
+		q := store.QueryFunc(QuerySelectRecordsSince, getHostDomain(c), lastweek())
+
+		var (
+			id            int
+			ts            pgtype.Timestamptz
+			sender        string
+			topic         string
+			headerSubject string
+			body          string
+			maxTime       time.Time
+		)
+
+		rss := MakeRSS()
+		channel := MakeRssChannel(getHostDomain(c),
+			fmt.Sprintf("https://%s", getHostDomain(c)),
+			fmt.Sprintf("News from %s", getHostDomain(c)),
+			fmt.Sprintf("https://%s/.rss", getHostDomain(c)))
+		rss.Append(channel)
+
+		q(RowCallback(func() {
+			if ts.Time.After(maxTime) {
+				maxTime = ts.Time
+			}
+
+			url := fmt.Sprintf("https://%s/%s/%d",
+				getHostDomain(c), topic, id)
+			channel.Append(MakeRssItem(topic, senderName(sender), decodeSubject(headerSubject), url, body, ts.Time))
+		}), &id, &ts, &sender, &topic, &headerSubject, &body)
+
+		channel.Append(RssBuildDate(NewAttr(), Text(maxTime.Format(time.RFC822Z))))
+		c.Response().Header().Set(echo.HeaderContentType, "application/rss+xml; charset=UTF-8")
+		return c.String(http.StatusOK, RenderRss(rss))
+	}
+
+	app.GET("/.rss", handlerAll)
 	app.GET("/.rss/:topic", handler)
 }
 

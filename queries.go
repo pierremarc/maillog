@@ -45,6 +45,8 @@ const QuerySelectRecord = "SelectRecord"
 
 const QuerySelectRecordsSince = "SelectRecordsSince"
 
+const QuerySelectRecordsTopicSince = "SelectRecordsTopicSince"
+
 const QuerySelectTopics = "SelectTopics"
 
 const QueryTruncateAttachments = "TruncateAttachments"
@@ -153,6 +155,13 @@ WHERE
     id = $1`)
 	
 	store.Register(QuerySelectRecordsSince, `SELECT  
+    id, ts, sender, topic, header_subject, body 
+FROM {{.Records}} 
+WHERE 
+    domain = $1
+    AND ts >= $2::date`)
+	
+	store.Register(QuerySelectRecordsTopicSince, `SELECT  
     id, ts, sender, topic, header_subject, body 
 FROM {{.Records}} 
 WHERE 

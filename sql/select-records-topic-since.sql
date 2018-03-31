@@ -3,4 +3,5 @@ SELECT
 FROM {{.Records}} 
 WHERE 
     domain = $1
-    AND ts >= $2::date
+    AND topic = $2
+    AND ts >= $3::date
