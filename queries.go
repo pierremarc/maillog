@@ -167,7 +167,8 @@ FROM {{.Records}}
 WHERE 
     domain = $1
     AND topic = $2
-    AND ts >= $3::date`)
+    AND ts >= $3::date
+    AND parent IS NULL `)
 	
 	store.Register(QuerySelectTopics, `SELECT 
     DISTINCT(topic) 

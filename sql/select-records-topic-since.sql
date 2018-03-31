@@ -5,3 +5,4 @@ WHERE
     domain = $1
     AND topic = $2
     AND ts >= $3::date
+    AND parent IS NULL 
