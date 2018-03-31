@@ -61,6 +61,7 @@ type Node interface {
 	Text() TextNode
 	Tag() string
 	Attrs() attributes
+	SetAttr(string, string) Node
 	Children() ArrayNode
 	Append(n ...Node) Node
 	Render() string
@@ -87,6 +88,9 @@ func (r raw) Tag() string {
 }
 func (r raw) Attrs() attributes {
 	return NewAttr()
+}
+func (r raw) SetAttr(string, string) Node {
+	return r
 }
 func (r raw) Children() ArrayNode {
 	return NewArrayNode()
@@ -117,17 +121,21 @@ func (n *node) Append(ns ...Node) Node {
 	n.children = n.children.Concat(NewArrayNode(ns...))
 	return n
 }
+func (n *node) SetAttr(k string, v string) Node {
+	n.attrs.Set(k, v)
+	return n
+}
 func renderNode(n node) string {
 	// log.Printf("renderNode %v", n)
 	var attrs []string
 	for _, p := range n.attrs {
-		kv := fmt.Sprintf("%s=\"%s\"", p.k, p.v)
+		kv := fmt.Sprintf(" %s=\"%s\"", p.k, p.v)
 		attrs = append(attrs, kv)
 	}
 
 	children := n.children.MapString(func(n Node) string { return n.Render() })
 
-	return fmt.Sprintf("<%s %s>%s</%s>",
+	return fmt.Sprintf("<%s%s>%s</%s>",
 		n.tag,
 		strings.Join(attrs, " "),
 		strings.Join(children.Slice(), "\n"),
@@ -148,9 +156,9 @@ func createNode(tag string, attrs attributes, children ...Node) Node {
 	return n
 }
 
-type factoryFunc func(attrs attributes, children ...Node) Node
+type htmlFactoryFunc func(attrs attributes, children ...Node) Node
 
-func factory(tag string) factoryFunc {
+func htmlFactory(tag string) htmlFactoryFunc {
 	f := func(attrs attributes, children ...Node) Node {
 		return createNode(tag, attrs, children...)
 	}
@@ -158,20 +166,20 @@ func factory(tag string) factoryFunc {
 }
 
 var (
-	NoDisplay = factory("DIV")(NewAttr().Set("style", "display:none"))
-	Div       = factory("DIV")
-	P         = factory("P")
-	Span      = factory("SPAN")
-	H1        = factory("H1")
-	H2        = factory("H2")
-	H3        = factory("H3")
-	A         = factory("A")
-	Pre       = factory("PRE")
-	Img       = factory("IMG")
-	Style     = factory("STYLE")
-	Script    = factory("SCRIPT")
-	HeadLink  = factory("LINK")
-	HeadMeta  = factory("META")
+	NoDisplay = htmlFactory("DIV")(NewAttr().Set("style", "display:none"))
+	Div       = htmlFactory("DIV")
+	P         = htmlFactory("P")
+	Span      = htmlFactory("SPAN")
+	H1        = htmlFactory("H1")
+	H2        = htmlFactory("H2")
+	H3        = htmlFactory("H3")
+	A         = htmlFactory("A")
+	Pre       = htmlFactory("PRE")
+	Img       = htmlFactory("IMG")
+	Style     = htmlFactory("STYLE")
+	Script    = htmlFactory("SCRIPT")
+	HeadLink  = htmlFactory("LINK")
+	HeadMeta  = htmlFactory("META")
 )
 
 func Text(content string) Node {

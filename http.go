@@ -59,7 +59,7 @@ func header(c echo.Context, title string, args ...string) Node {
 	return r
 }
 
-func makeDocument(page string) document {
+func makeDocument(page string, hn ...Node) document {
 	doc := NewDoc(NewAttr().Set("data-page", page))
 	doc.head.Append(HeadMeta(NewAttr().Set("charset", "utf-8")))
 	doc.head.Append(HeadMeta(NewAttr().
@@ -68,6 +68,9 @@ func makeDocument(page string) document {
 	doc.head.Append(Style(NewAttr(), Text(CssReset)))
 	doc.head.Append(Style(NewAttr(), Text(CssStyle)))
 	doc.head.Append(Script(NewAttr(), Text(JsBundle)))
+	for _, n := range hn {
+		doc.head.Append(n)
+	}
 	return doc
 }
 
@@ -126,7 +129,12 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 			getHostDomain(c), paramTopic)
 		qf := store.QueryFunc(QuerySelectFirstRecord,
 			getHostDomain(c), paramTopic)
-		var doc = makeDocument("thread")
+		rssLink := HeadLink(NewAttr().
+			Set("rel", "alternate").
+			Set("type", "application/rss+xml").
+			Set("href", fmt.Sprintf("https://%s/.rss/%s", getHostDomain(c), paramTopic)).
+			Set("title", fmt.Sprintf("News at %s in %s", getHostDomain(c), paramTopic)))
+		var doc = makeDocument("thread", rssLink)
 		var (
 			id      int
 			ts      pgtype.Timestamptz
@@ -139,6 +147,7 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 		doc.body.Append(header(c, paramTopic, paramTopic))
 
 		replyto := fmt.Sprintf("mailto:%s@%s", paramTopic, getHostDomain(c))
+		rss := fmt.Sprintf("https://%s/.rss/%s", getHostDomain(c), paramTopic)
 		firstUrl := fmt.Sprintf("/%s/%d", paramTopic, id)
 		intro := P(ClassAttr("topic-replyto-description"),
 			Textf(`
@@ -149,7 +158,9 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 				Text(decodeSubject(subject))),
 			Text(". Send a message to this thread at the following address: "),
 			A(ClassAttr("link").Set("href", replyto),
-				Textf("%s@%s", paramTopic, getHostDomain(c))))
+				Textf("%s@%s", paramTopic, getHostDomain(c))),
+			Text("To keep track of this thread,you can subscribe to the "),
+			A(ClassAttr("rss-link link").Set("href", rss), Text("rss feed")))
 
 		doc.body.Append(
 			Div(ClassAttr("topic-replyto-block").Set("data-topic", paramTopic), intro))
@@ -411,8 +422,55 @@ func notifyHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *N
 	app.GET("/.notifications", handler)
 }
 
+func yesterday() string {
+	y := time.Now().Add(-24 * time.Hour)
+	yy, my, dy := y.Date()
+	log.Printf("Yesterday %d-%02d-%02d", yy, my, dy)
+	return fmt.Sprintf("%d-%02d-%02d", yy, my, dy)
+}
+
+func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
+	handler := func(c echo.Context) error {
+		paramTopic := c.Param("topic")
+		q := store.QueryFunc(QuerySelectRecordsSince, getHostDomain(c), paramTopic, yesterday())
+
+		var (
+			id            int
+			ts            pgtype.Timestamptz
+			sender        string
+			topic         string
+			headerSubject string
+			body          string
+			maxTime       time.Time
+		)
+
+		rss := MakeRSS()
+		channel := MakeRssChannel(fmt.Sprintf("%s - %s", getHostDomain(c), paramTopic),
+			fmt.Sprintf("https://%s/%s", getHostDomain(c), paramTopic),
+			fmt.Sprintf("News from %s in %s", getHostDomain(c), paramTopic),
+			fmt.Sprintf("https://%s/.rss/%s", getHostDomain(c), paramTopic))
+		rss.Append(channel)
+
+		q(RowCallback(func() {
+			if ts.Time.After(maxTime) {
+				maxTime = ts.Time
+			}
+
+			url := fmt.Sprintf("https://%s/%s/%d",
+				getHostDomain(c), paramTopic, id)
+			channel.Append(MakeRssItem(topic, senderName(sender), decodeSubject(headerSubject), url, body, ts.Time))
+		}), &id, &ts, &sender, &topic, &headerSubject, &body)
+
+		channel.Append(RssBuildDate(NewAttr(), Text(maxTime.Format(time.RFC822Z))))
+		c.Response().Header().Set(echo.HeaderContentType, "application/rss+xml; charset=UTF-8")
+		return c.String(http.StatusOK, RenderRss(rss))
+	}
+	app.GET("/.rss/:topic", handler)
+}
+
 func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
 	notifyHandler(app, store, v, cont, n)
+	rssHandler(app, store, v, cont, n)
 	listTopics(app, store, v, cont)
 	listInTopics(app, store, v, cont)
 	showMessage(app, store, v, cont)

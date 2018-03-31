@@ -1,3 +1,19 @@
+/*
+ *  Copyright (C) 2018 Pierre Marchand <pierre.m@atelier-cartographique.be>
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as published by
+ *  the Free Software Foundation, version 3 of the License.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 package main
 
 
@@ -27,7 +43,7 @@ const QuerySelectIntopic = "SelectIntopic"
 
 const QuerySelectRecord = "SelectRecord"
 
-const QuerySelectRecords = "SelectRecords"
+const QuerySelectRecordsSince = "SelectRecordsSince"
 
 const QuerySelectTopics = "SelectTopics"
 
@@ -136,12 +152,13 @@ FROM {{.Records}}
 WHERE 
     id = $1`)
 	
-	store.Register(QuerySelectRecords, `SELECT  
-    id, ts, sender, topic, header_subject, body, parent 
+	store.Register(QuerySelectRecordsSince, `SELECT  
+    id, ts, sender, topic, header_subject, body 
 FROM {{.Records}} 
 WHERE 
     domain = $1
-    id = $2`)
+    AND topic = $2
+    AND ts >= $3::date`)
 	
 	store.Register(QuerySelectTopics, `SELECT 
     DISTINCT(topic) 

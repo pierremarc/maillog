@@ -104,8 +104,6 @@ type Store struct {
 
 func (store Store) Query(name string, args ...interface{}) (*pgx.Rows, error) {
 	f := store.Tables.q(store.pool, name)
-	// store.pool.Get()
-	// defer store.pool.Release()
 	return f(args...)
 }
 
