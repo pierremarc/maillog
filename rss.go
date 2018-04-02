@@ -29,6 +29,7 @@ var (
 	RssDescription = htmlFactory("description")
 	RssItem        = htmlFactory("item")
 	RssMedia       = htmlFactory("media:content")
+	RssMediaTitle  = htmlFactory("media:title")
 	RssPubDate     = htmlFactory("pubDate")
 	RssBuildDate   = htmlFactory("lastBuildDate")
 	RssGUID        = htmlFactory("guid")
@@ -42,7 +43,8 @@ func MakeRSS() Node {
 		Set("version", "2.0").
 		Set("xmlns:media", "http://search.yahoo.com/mrss/").
 		Set("xmlns:atom", "http://www.w3.org/2005/Atom").
-		Set("xmlns:dc", "http://purl.org/dc/elements/1.1/"))
+		Set("xmlns:dc", "http://purl.org/dc/elements/1.1/").
+		Set("xmlns:media", "http://search.yahoo.com/mrss/"))
 }
 
 func MakeRssChannel(title string, link string, desc string, self string) Node {
@@ -67,8 +69,16 @@ func MakeRssItem(topic string, sender string, title string, link string, desc st
 		RssLink(NewAttr(), Text(link)),
 		RssAuthor(NewAttr(), Text(cdata(sender))),
 		RssCategory(NewAttr(), Text(cdata(topic))),
-		RssPubDate(NewAttr(), Text(t.Format(time.RFC822Z))),
+		RssPubDate(NewAttr(), Text(t.Format(time.RFC1123Z))),
 		RssGUID(NewAttr().Set("isPermaLink", "true"), Text(link)))
+}
+
+func MakeRssMedia(url string, mediaType string, title string) Node {
+	return RssMedia(NewAttr().
+		Set("url", url).
+		Set("type", mediaType).
+		Set("expression", "full"),
+		RssMediaTitle(NewAttr().Set("type", "plain"), Text(cdata(title))))
 }
 
 const xmlDocElem = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"

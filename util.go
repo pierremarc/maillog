@@ -104,3 +104,11 @@ func getAnswer(topic string) OptionUInt64 {
 	}
 	return NoneUInt64()
 }
+
+func getMediaType(contentType string) string {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return "*/*"
+	}
+	return mediaType
+}

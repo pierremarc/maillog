@@ -440,14 +440,16 @@ func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Noti
 			topic         string
 			headerSubject string
 			body          string
-			maxTime       time.Time
+			maxTime       = time.Now().Add(-24 * 7 * time.Hour)
 		)
 
 		rss := MakeRSS()
+		lastBuidDate := RssBuildDate(NewAttr())
 		channel := MakeRssChannel(fmt.Sprintf("%s - %s", getHostDomain(c), paramTopic),
 			fmt.Sprintf("https://%s/%s", getHostDomain(c), paramTopic),
 			fmt.Sprintf("News from %s in %s", getHostDomain(c), paramTopic),
 			fmt.Sprintf("https://%s/.rss/%s", getHostDomain(c), paramTopic))
+		channel.Append(lastBuidDate)
 		rss.Append(channel)
 
 		q(RowCallback(func() {
@@ -457,10 +459,26 @@ func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Noti
 
 			url := fmt.Sprintf("https://%s/%s/%d",
 				getHostDomain(c), paramTopic, id)
-			channel.Append(MakeRssItem(topic, senderName(sender), decodeSubject(headerSubject), url, body, ts.Time))
+
+			var (
+				rid         int
+				contentType string
+				fn          string
+				ats         = make([]Node, 0)
+			)
+			// attachments
+			store.QueryFunc(QuerySelectAttachments, id)(RowCallback(func() {
+				mediaURL := fmt.Sprintf("https://%s/attachments/%s/%s/%d/%s",
+					getHostDomain(c), encodedSender(sender), paramTopic, rid, fn)
+				ats = append(ats, MakeRssMedia(mediaURL, getMediaType(contentType), fn))
+			}), &rid, &contentType, &fn)
+
+			item := MakeRssItem(topic, senderName(sender), decodeSubject(headerSubject), url, body, ts.Time)
+			item.Append(ats...)
+			channel.Append(item)
 		}), &id, &ts, &sender, &topic, &headerSubject, &body)
 
-		channel.Append(RssBuildDate(NewAttr(), Text(maxTime.Format(time.RFC822Z))))
+		lastBuidDate.Append(Text(maxTime.Format(time.RFC1123Z)))
 		c.Response().Header().Set(echo.HeaderContentType, "application/rss+xml; charset=UTF-8")
 		return c.String(http.StatusOK, RenderRss(rss))
 	}
@@ -475,7 +493,7 @@ func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Noti
 			topic         string
 			headerSubject string
 			body          string
-			maxTime       time.Time
+			maxTime       = time.Now().Add(-24 * 7 * time.Hour)
 		)
 
 		rss := MakeRSS()
@@ -495,7 +513,7 @@ func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Noti
 			channel.Append(MakeRssItem(topic, senderName(sender), decodeSubject(headerSubject), url, body, ts.Time))
 		}), &id, &ts, &sender, &topic, &headerSubject, &body)
 
-		channel.Append(RssBuildDate(NewAttr(), Text(maxTime.Format(time.RFC822Z))))
+		channel.Append(RssBuildDate(NewAttr(), Text(maxTime.Format(time.RFC1123Z))))
 		c.Response().Header().Set(echo.HeaderContentType, "application/rss+xml; charset=UTF-8")
 		return c.String(http.StatusOK, RenderRss(rss))
 	}
