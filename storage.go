@@ -110,8 +110,8 @@ func (store Store) Query(name string, args ...interface{}) (*pgx.Rows, error) {
 func (store Store) Register(name string, qs string) {
 	log.Printf("Store.Register %s", name)
 	namedQueriesMut.Lock()
+	defer namedQueriesMut.Unlock()
 	namedQueries[name] = qs
-	namedQueriesMut.Unlock()
 }
 
 type queryFunc func(cb rowsCb, cells ...interface{}) ResultBool

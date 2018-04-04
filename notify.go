@@ -18,6 +18,7 @@ package main
 
 import (
 	"log"
+	"sync"
 
 	"github.com/satori/go.uuid"
 )
@@ -42,12 +43,14 @@ func MakeNotification(t string, r int, p int) Notification {
 type Notifier struct {
 	source  chan Notification
 	clients []sucscription
+	cmut    sync.Locker
 }
 
 func NewNotifier() *Notifier {
 	clients := make([]sucscription, 0)
 	source := make(chan Notification)
-	n := Notifier{source, clients}
+	mut := sync.Mutex{}
+	n := Notifier{source, clients, &mut}
 	go func() {
 		for i := range source {
 			for _, s := range n.clients {
@@ -72,6 +75,8 @@ func (b *Notifier) Subscribe(r Receiver) uuid.UUID {
 
 func (b *Notifier) Unsubscribe(id uuid.UUID) {
 	log.Printf("Notifier.Unsubscribe %s", id.String())
+	b.cmut.Lock()
+	defer b.cmut.Unlock()
 	clients := make([]sucscription, 0)
 	for _, s := range b.clients {
 		if !uuid.Equal(id, s.id) {
