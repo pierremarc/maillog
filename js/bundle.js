@@ -63,14 +63,17 @@ function start() {
 
     function connect() {
         const host = loc.host
-        const socket = new WebSocket(`${isSecure ? 'wss' : 'ws'}://${host}/.notifications`)
+        const addr = `${isSecure ? 'wss' : 'ws'}://${host}/.notifications`
+        const socket = new WebSocket(addr)
+        console.log(`Connect to ${addr}`)
 
         socket.addEventListener('open', function (event) {
             socket.send('Hello Server!');
+            console.log(`Connection Opened`)
         });
 
         socket.addEventListener('message', function (event) {
-            console.log('Message from server ', event.data);
+            // console.log('Message from server ', event.data);
             try {
                 const data = JSON.parse(event.data)
                 checkUpdate(data)
@@ -79,6 +82,10 @@ function start() {
                 console.error('Error processing data ', event.data);
             }
         });
+
+        socket.addEventListener("close", function () {
+            window.setTimeout(connect, 2000);
+        })
     }
 
 

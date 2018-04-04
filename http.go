@@ -26,9 +26,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/labstack/echo"
-	"golang.org/x/net/websocket"
 )
 
 func link(href string, label string) Node {
@@ -397,26 +397,65 @@ func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
 	app.GET("/attachments/:sender/:topic/:id/:name", handler)
 }
 
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+func createWSHandler(w http.ResponseWriter, r *http.Request, h func(*websocket.Conn)) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	h(conn)
+}
+
 func notifyHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
 	handler := func(c echo.Context) error {
-		websocket.Handler(func(ws *websocket.Conn) {
+		w := c.Response()
+		r := c.Request()
+		createWSHandler(w, r, func(ws *websocket.Conn) {
 			defer ws.Close()
 			sub := n.Subscribe(func(n Notification) {
 				log.Printf("Notification %v", n)
-				websocket.JSON.Send(ws, n)
+				err := ws.WriteJSON(n)
+				if err != nil {
+					ws.Close()
+				}
 			})
 			defer n.Unsubscribe(sub)
 
+			ponged := true
+			pingDeadline := 12 * time.Second
+			ws.SetPongHandler(func(appData string) error {
+				ponged = true
+				return nil
+			})
+
+			ticker := time.NewTicker(pingDeadline)
+			defer ticker.Stop()
+			go func() {
+				for t := range ticker.C {
+					if ponged {
+						pingData := make([]byte, 0)
+						deadline := time.Now().Add(pingDeadline)
+						ws.WriteControl(websocket.PingMessage, pingData, deadline)
+					} else {
+						log.Println("Still waiting for pong", t)
+					}
+				}
+			}()
+
 			for {
-				msg := ""
-				err := websocket.Message.Receive(ws, &msg)
+				messageType, p, err := ws.ReadMessage()
 				if err != nil {
 					break
 				}
-				log.Printf("websocket: %s", msg)
+				log.Printf("websocket:%v %s", messageType, p)
 			}
-		}).ServeHTTP(c.Response(), c.Request())
-
+		})
 		return nil
 	}
 	app.GET("/.notifications", handler)
