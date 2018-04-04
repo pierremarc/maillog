@@ -400,6 +400,10 @@ func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		// allow all connections by default
+		return true
+	},
 }
 
 func createWSHandler(w http.ResponseWriter, r *http.Request, h func(*websocket.Conn)) {
