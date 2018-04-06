@@ -1,8 +1,8 @@
 
 body {
     font-family: sans-serif;
-    width: 90%;
-    margin: auto;
+    /* width: 90%; */
+    margin: 2em;
     position: relative;
 }
 @media screen and (max-width: 48em) {
@@ -11,22 +11,27 @@ body {
 }
 }
 
-body div.header {
-    margin: 1em auto 1em auto;
+body[data-page=root] > .header, body[data-page=thread] > .header {
+    margin: 1em auto;
     padding-bottom: 1em;
     border-bottom: 0.5px solid black;
 }
 
-body > div.header > h1.title {
-        font-size: 140%;
+body[data-page=message] > .header {
+    margin: auto auto 3em 12em;
+    padding-bottom: 1em;
+}
+
+.header > h1.title {
+    font-size: 180%;
     font-weight: bold;
 }
 
-body > div.header > div.bc-block {
-
+.header > .bc-block {
+margin-top: .3em;
 }
 
-body > div.header > div.bc-block > div.bc {
+.header > .bc-block > .bc {
     font-size: 80%;
     /* font-family: monospace;
     font-weight: bold; */
@@ -38,36 +43,53 @@ a.link {
     font-weight: bold;
 }
 
-body > div.message-block {
+.message-block, .answer-block {
+    display: flex;
     position: relative;
+    padding: 1em 1em 1em 0;
 }
 
-body > div.message-block > div.message-header {
-    margin-bottom: 1em;
-    padding-bottom: 1em;
-    border-bottom: 0.5px solid black;
+.message-header, .answer-header-block {
+    flex: 0 0 12em;
+    text-align: right;
+    padding-right: 1em;
+    line-height: 140%;
+    font-size: 100%;
+    font-family: monospace;
 }
 
-body > div.message-block > div.message-header > span.message-sender {
+.message-body, .answer-body {
+    padding: 0 0 0 1em;
+    width: 42em;
+}
+
+.message-sender {
     font-style: italic;
     font-size: 90%;
 }
 
-body > div.message-block > div.message-header > a {
+.message-date {
+    font-size: 80%;
+}
+
+.answer-view {
+    font-size: 80%;
+}
+
+ .message-header > .parent {
+font-size: 80%;
+}
+
+.message-block > .message-header > a {
     font-size: 80%;
     position: absolute;
     right: 0;
     margin-top: 0.2em;
 }
 
-body > div.message-block > div.message-body {
-    padding: 16px;
-}
+ 
 
-body > div.message-block > div.message-header > div.parent {
-    position: absolute;
-    top: -1em;
-}
+
 p.paragraph {
     padding-bottom: 1em;
 }
@@ -76,24 +98,21 @@ img {
     max-width:100%;
 }
 
-body > div.answer {
-border: 0.5px solid gray;
-    padding: 1em;
+.answer {
+    border-left: 0 solid #2196f3;
+    background-color: white;
 }
 
+.answer.depth-1 { border-left-width: 1px; }
+.answer.depth-2 { border-left-width: 2px; }
+.answer.depth-3 { border-left-width: 4px; }
+.answer.depth-4 { border-left-width: 6px;}
+.answer.depth-5 { border-left-width: 8px;}
+.answer.depth-6 {border-left-width: 10px;}
+.answer.depth-7 { border-left-width: 12px;}
+.answer.depth-8 { border-left-width: 14px;}
 
-div.answer-block {
-    padding-bottom: 0.5em;
-    margin-bottom: 0.5em;
-    border-bottom: 0.5px solid gray;
-}
 
-div.answer-block > div.answer-header-block {
-   position: relative;
-    border-bottom: 0.5px solid gray;
-    padding-bottom: 0.5em;
-    margin-bottom: 0.5em;
-}
 
 .answer-link {
 /* margin-top: .3em; */
@@ -104,13 +123,6 @@ div.answer-block > div.answer-header-block {
     font-size: 80%;
 }
 
-div.answer.depth-2 { margin-left: 1em; }
-div.answer.depth-3 { margin-left: 2em; }
-div.answer.depth-4 { margin-left: 3em; }
-div.answer.depth-5 { margin-left: 4em; }
-div.answer.depth-6 { margin-left: 5em; }
-div.answer.depth-7 { margin-left: 6em; }
-div.answer.depth-8 { margin-left: 7em; }
 
 
 .topic {

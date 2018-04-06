@@ -214,11 +214,13 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 	qm := store.QueryFunc(QuerySelectAnswers, pid)
 
 	var nas = map[int]Node{}
+	var vas = map[int]Node{}
 	var sas = map[int]string{}
 
 	qi(RowCallback(func() {
 		aids = append(aids, id)
 		nas[id] = Div(ClassAttr("attachment-block"))
+		vas[id] = Div(ClassAttr("viz-block"))
 		sas[id] = sender
 	}), &id, &sender)
 
@@ -230,14 +232,17 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 
 		block := Div(
 			ClassAttr("answer-block").Set("data-record", strconv.Itoa(id)))
-		block.Append(
-			Div(ClassAttr("answer-header-block"),
-				H2(ClassAttr("answer-subject"),
-					A(ClassAttr("link").
-						Set("href", url),
-						Text(senderName(sender)))),
-				replyBlock(c, topic, id, subject)),
-			Div(ClassAttr("answer-body"), NewRawNode(body)), nas[id])
+
+		headerBlock := Div(ClassAttr("message-header"),
+			Div(ClassAttr("message-sender"), Text(senderName(sender))),
+			Div(ClassAttr("message-date"), Text(formatTime(ts.Time))),
+			Div(ClassAttr("answer-view"),
+				A(ClassAttr("link").Set("href", url), Text("view"))),
+			replyBlock(c, topic, id, subject))
+
+		bodyBlock := Div(ClassAttr("answer-body"), NewRawNode(body), vas[id], nas[id])
+
+		block.Append(headerBlock, bodyBlock)
 		root.Append(block, formatAnswers(strconv.Itoa(id), store, c, depth+1))
 	}), &id, &ts, &sender, &topic, &subject, &body, &parent).
 		FoldNodeF(
@@ -246,6 +251,7 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 				attachments := []attachmentRecord{}
 				for _, aid := range aids {
 					attBlock := nas[aid]
+					vizBlock := vas[aid]
 					qa := store.QueryFunc(QuerySelectAttachments, aid)
 					qa(RowCallback(func() {
 						log.Printf("attach to answer %s(%s), %s, %d, %s",
@@ -257,9 +263,9 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 							ct:     contentType,
 							fn:     fileName,
 						})
+						formatAttachments(attachments, attBlock, vizBlock)
 					}), &id, &contentType, &fileName)
 
-					attBlock.Append(formatAttachments(attachments))
 					attachments = []attachmentRecord{}
 				}
 				if hasAnswer {
@@ -281,22 +287,22 @@ type attachmentRecord struct {
 	fn     string
 }
 
-func formatAttachments(rs []attachmentRecord) Node {
-	node := Div(ClassAttr("attachment-block"))
+func formatAttachments(rs []attachmentRecord, link Node, viz Node) {
+	// node := Div(ClassAttr("attachment-block"))
 
 	for _, r := range rs {
 		mt := strings.Split(r.ct, "/")[0]
 		url := fmt.Sprintf("/attachments/%s/%s/%d/%s", r.sender, r.topic, r.record, r.fn)
 		if "image" == mt {
-			node.Append(
+			link.Append(
 				A(ClassAttr("attachment image").Set("href", url).Set("title", r.fn),
 					Img(ClassAttr("").Set("src", url))))
 		} else {
-			node.Append(A(ClassAttr("attachment link").Set("href", url), Text(r.fn)))
+			viz.Append(A(ClassAttr("attachment link").Set("href", url), Text(r.fn)))
 		}
 	}
 
-	return node
+	// return node
 }
 
 func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
@@ -321,6 +327,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 
 		block := Div(ClassAttr("message-block").Set("data-record", paramId))
 		attBlock := Div(ClassAttr("attachment-block"))
+		vizBlock := Div(ClassAttr("viz-block"))
 
 		return qm(RowCallback(func() {
 			pnode := NoDisplay
@@ -331,14 +338,16 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 						Text("parent")))
 			}
 
-			block.Append(
-				Div(ClassAttr("message-header"),
-					Span(ClassAttr("message-sender"),
-						Text(fmt.Sprintf("%s — %s", senderName(sender), formatTime(ts.Time)))),
-					pnode,
-					replyBlock(c, paramTopic, id, subject)),
-				Div(ClassAttr("message-body"), NewRawNode(body)),
-				attBlock)
+			headerBlock := Div(ClassAttr("message-header"),
+				Div(ClassAttr("message-sender"), Text(senderName(sender))),
+				Div(ClassAttr("message-date"), Text(formatTime(ts.Time))),
+				pnode,
+				replyBlock(c, paramTopic, id, subject))
+
+			bodyBlock := Div(ClassAttr("message-body"),
+				NewRawNode(body), vizBlock, attBlock)
+
+			block.Append(headerBlock, bodyBlock)
 
 			doc.body.Append(
 				header(c, ensureSubject(subject), paramTopic, paramId),
@@ -361,7 +370,7 @@ func showMessage(app *echo.Echo, store Store, v Volume, cont chan string) {
 						})
 					}), &id, &contentType, &fileName)
 
-					attBlock.Append(formatAttachments(attachments))
+					formatAttachments(attachments, attBlock, vizBlock)
 
 					return c.HTML(http.StatusOK, doc.Render())
 				})
