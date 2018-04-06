@@ -57,11 +57,7 @@ body {
     margin: 2em;
     position: relative;
 }
-@media screen and (max-width: 48em) {
-    body {
-        /* font-size:132%; */
-}
-}
+
 
 body[data-page=root] > .header, body[data-page=thread] > .header {
     margin: 1em auto;
@@ -116,7 +112,7 @@ a.link {
 }
 
 .message-sender {
-    font-style: italic;
+    /* font-style: italic; */
     font-size: 90%;
 }
 
@@ -132,12 +128,12 @@ a.link {
 font-size: 80%;
 }
 
-.message-block > .message-header > a {
+/* .message-block > .message-header > a {
     font-size: 80%;
     position: absolute;
     right: 0;
     margin-top: 0.2em;
-}
+} */
 
  
 
@@ -246,5 +242,61 @@ span.message-item-ts {
 
 .new-reply {
     background-color: #ffefbf;
+}
+
+@media screen and (orientation: portrait), screen and (max-width: 48em)  {
+
+body[data-page=message] > .header {
+    margin: 1em auto;
+    padding-bottom: 1em;
+}
+
+.message-block, .answer-block {
+    display: initial;
+    position: relative;
+    padding: initial;
+}
+
+.message-header, .answer-header-block {
+    flex: none;
+    text-align: left;
+    line-height: 140%;
+    font-size: 100%;
+    font-family: monospace;
+}
+
+.message-body, .answer-body {
+    padding: 0.3em 0 .7em 0;
+    width: 100%;
+}
+
+.message-sender {
+    display: inline-block;
+    font-size: 90%;
+}
+
+.message-date {
+    display: inline-block;
+    font-size: 80%;
+}
+
+.answer-view {
+    display: inline-block;
+    font-size: 80%;
+}
+.answer-link {
+    display: inline-block;
+}
+
+ .message-header > .parent {
+    display: inline-block;
+font-size: 80%;
+}
+
+.answer {
+    border:none;
+    background-color: white;
+}
+
 }`
 
