@@ -264,9 +264,9 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 							fn:     fileName,
 						})
 						formatAttachments(attachments, attBlock, vizBlock)
+						attachments = []attachmentRecord{}
 					}), &id, &contentType, &fileName)
 
-					attachments = []attachmentRecord{}
 				}
 				if hasAnswer {
 					return root
@@ -294,11 +294,11 @@ func formatAttachments(rs []attachmentRecord, link Node, viz Node) {
 		mt := strings.Split(r.ct, "/")[0]
 		url := fmt.Sprintf("/attachments/%s/%s/%d/%s", r.sender, r.topic, r.record, r.fn)
 		if "image" == mt {
-			link.Append(
+			viz.Append(
 				A(ClassAttr("attachment image").Set("href", url).Set("title", r.fn),
 					Img(ClassAttr("").Set("src", url))))
 		} else {
-			viz.Append(A(ClassAttr("attachment link").Set("href", url), Text(r.fn)))
+			link.Append(A(ClassAttr("attachment link").Set("href", url), Text(r.fn)))
 		}
 	}
 
