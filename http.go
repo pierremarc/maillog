@@ -298,7 +298,10 @@ func formatAttachments(rs []attachmentRecord, link Node, viz Node) {
 				A(ClassAttr("attachment image").Set("href", url).Set("title", r.fn),
 					Img(ClassAttr("").Set("src", url))))
 		} else {
-			link.Append(A(ClassAttr("attachment link").Set("href", url), Text(r.fn)))
+			if getMediaType(r.ct) != "text/html" { // html version is mostly noise
+				log.Printf("link attachment %s", r.ct)
+				link.Append(A(ClassAttr("attachment link").Set("href", url), Text(r.fn)))
+			}
 		}
 	}
 
