@@ -245,6 +245,9 @@ span.message-item-ts {
 }
 
 @media screen and (orientation: portrait), screen and (max-width: 48em)  {
+body {
+    margin: 2em 1em;
+}
 
 body[data-page=message] > .header {
     margin: 1em auto;
