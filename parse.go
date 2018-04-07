@@ -129,13 +129,16 @@ func (s *serPart) Walk(f func(SerializedPart)) {
 	}
 }
 
+const maxparts = 42
+
 func walkPartSync(r io.Reader, boundary string, parts *[]SerializedPart) {
-	// log.Printf("walkPartSync %v", r)
+	log.Printf("walkPartSync %v", boundary)
 	reader := multipart.NewReader(r, boundary)
-	for {
+	for i := 0; i < maxparts; i++ {
+		log.Printf("Next Part %v", i)
 		part, err := reader.NextPart()
 		if err != nil {
-			log.Printf("Err on NextPart %s", err.Error())
+			log.Printf("Err on NextPart `%s`", err.Error())
 			break
 		}
 
@@ -150,7 +153,8 @@ func walkPartSync(r io.Reader, boundary string, parts *[]SerializedPart) {
 		*parts = append(*parts, &sp)
 		if isMultipart(mediatype) {
 			newBoundary := params["boundary"]
-			walkPartSync(part, newBoundary, &sp.children)
+			walkPartSync(bytes.NewReader(sp.Content()),
+				newBoundary, &sp.children)
 		}
 		part.Close()
 	}
