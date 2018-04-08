@@ -20,6 +20,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"mime"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -111,4 +112,12 @@ func getMediaType(contentType string) string {
 		return "*/*"
 	}
 	return mediaType
+}
+
+func getMainType(mt string) string {
+	return strings.Split(mt, "/")[0]
+}
+
+func ensureDir(dir string) {
+	os.MkdirAll(dir, os.ModePerm)
 }

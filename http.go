@@ -292,11 +292,14 @@ func formatAttachments(rs []attachmentRecord, link Node, viz Node) {
 
 	for _, r := range rs {
 		mt := strings.Split(r.ct, "/")[0]
-		url := fmt.Sprintf("/attachments/%s/%s/%d/%s", r.sender, r.topic, r.record, r.fn)
+		url := fmt.Sprintf("/attachments/%s/%s/%d/%s",
+			r.sender, r.topic, r.record, r.fn)
 		if "image" == mt {
+			thumbnailUrl := fmt.Sprintf("/thumbnail/%s/%s/%d/%d/%s",
+				r.sender, r.topic, r.record, ThumbnailMedium, r.fn)
 			viz.Append(
 				A(ClassAttr("attachment image").Set("href", url).Set("title", r.fn),
-					Img(ClassAttr("").Set("src", url))))
+					Img(ClassAttr("").Set("src", thumbnailUrl))))
 		} else {
 			if getMediaType(r.ct) != "text/html" { // html version is mostly noise
 				log.Printf("link attachment %s", r.ct)
@@ -407,6 +410,35 @@ func showAttachment(app *echo.Echo, store Store, v Volume, cont chan string) {
 
 	}
 	app.GET("/attachments/:sender/:topic/:id/:name", handler)
+
+	thumbnailHandler := func(c echo.Context) error {
+		sender := c.Param("sender")
+		topic := c.Param("topic")
+		id := c.Param("id")
+		name := c.Param("name")
+		sizeParam := c.Param("size")
+		size := OptionIntFrom(strconv.Atoi(sizeParam)).FoldInt(ThumbnailSmall, IdInt)
+
+		var (
+			ct string
+			fn string
+		)
+
+		store.QueryFunc(QuerySelectAttachment, id, name).Exec(&ct, &fn)
+		fp := path.Join(sender, topic, id, fn)
+		tp := GetThumbnail(v.GetPath(fp), uint(size))
+		log.Printf("Thumnail %s", tp)
+
+		return v.AbsReader(tp).FoldErrorF(
+			func(err error) error {
+				return echo.NewHTTPError(http.StatusNotFound, err.Error())
+			},
+			func(r io.Reader) error {
+				return c.Stream(http.StatusOK, ct, r)
+			})
+	}
+
+	app.GET("/thumbnail/:sender/:topic/:id/:size/:name", thumbnailHandler)
 }
 
 var upgrader = websocket.Upgrader{
@@ -520,15 +552,25 @@ func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Noti
 				contentType string
 				fn          string
 				ats         = make([]Node, 0)
+				thumbnail   Node
 			)
 			// attachments
 			store.QueryFunc(QuerySelectAttachments, id)(RowCallback(func() {
+				log.Printf("Got Attachment %v %s", rid, fn)
+				mediaType := getMediaType(contentType)
+				if getMainType(mediaType) == "image" && thumbnail == nil {
+					thumbnail = MakeRssThumbnail(fmt.Sprintf("https://%s/thumbnail/%s/%s/%d/%d/%s",
+						getHostDomain(c), encodedSender(sender), paramTopic, rid, ThumbnailSmall, fn))
+				}
 				mediaURL := fmt.Sprintf("https://%s/attachments/%s/%s/%d/%s",
 					getHostDomain(c), encodedSender(sender), paramTopic, rid, fn)
-				ats = append(ats, MakeRssMedia(mediaURL, getMediaType(contentType), fn))
+				ats = append(ats, MakeRssMedia(mediaURL, mediaType, fn))
 			}), &rid, &contentType, &fn)
 
 			item := MakeRssItem(topic, senderName(sender), decodeSubject(headerSubject), url, body, ts.Time)
+			if thumbnail != nil {
+				item.Append(thumbnail)
+			}
 			item.Append(ats...)
 			channel.Append(item)
 		}), &id, &ts, &sender, &topic, &headerSubject, &body)

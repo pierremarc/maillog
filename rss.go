@@ -29,6 +29,7 @@ var (
 	RssDescription = htmlFactory("description")
 	RssItem        = htmlFactory("item")
 	RssMedia       = htmlFactory("media:content")
+	RssThumbnail   = htmlFactory("media:thumbnail")
 	RssMediaTitle  = htmlFactory("media:title")
 	RssPubDate     = htmlFactory("pubDate")
 	RssBuildDate   = htmlFactory("lastBuildDate")
@@ -71,6 +72,10 @@ func MakeRssItem(topic string, sender string, title string, link string, desc st
 		RssCategory(NewAttr(), Text(cdata(topic))),
 		RssPubDate(NewAttr(), Text(t.Format(time.RFC1123Z))),
 		RssGUID(NewAttr().Set("isPermaLink", "true"), Text(link)))
+}
+
+func MakeRssThumbnail(url string) Node {
+	return RssThumbnail(NewAttr().Set("url", url))
 }
 
 func MakeRssMedia(url string, mediaType string, title string) Node {

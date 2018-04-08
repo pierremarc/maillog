@@ -39,6 +39,8 @@ type WriteOptions struct {
 type Volume interface {
 	Write(WriteOptions) ResultString
 	Reader(fp string) ResultReader
+	AbsReader(fp string) ResultReader
+	GetPath(fp string) string
 }
 
 type volume struct {
@@ -58,15 +60,19 @@ func (v volume) Write(o WriteOptions) ResultString {
 
 func (v volume) Reader(fp string) ResultReader {
 	rfp := path.Join(v.root, fp)
-	f, err := os.Open(rfp)
+	return v.AbsReader(rfp)
+}
+
+func (v volume) AbsReader(fp string) ResultReader {
+	f, err := os.Open(fp)
 	if err != nil {
 		return ErrReader(err)
 	}
 	return OkReader(f)
 }
 
-func ensureDir(dir string) {
-	os.MkdirAll(dir, os.ModePerm)
+func (v volume) GetPath(fp string) string {
+	return path.Join(v.root, fp)
 }
 
 func writeAttachment(dir string, fn string, data []byte) ResultString {
