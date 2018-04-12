@@ -25,6 +25,8 @@ const QueryInsertRecordParent = "InsertRecordParent"
 
 const QuerySelectAllPayloads = "SelectAllPayloads"
 
+const QuerySelectAllRecords = "SelectAllRecords"
+
 const QuerySelectAnswerids = "SelectAnswerids"
 
 const QuerySelectAnswers = "SelectAnswers"
@@ -42,6 +44,8 @@ const QuerySelectFirstRecord = "SelectFirstRecord"
 const QuerySelectIntopic = "SelectIntopic"
 
 const QuerySelectRecord = "SelectRecord"
+
+const QuerySelectRecordDomain = "SelectRecordDomain"
 
 const QuerySelectRecordsSince = "SelectRecordsSince"
 
@@ -98,6 +102,10 @@ RETURNING id`)
     id, sender, topic, payload
 FROM {{.Records}}`)
 	
+	store.Register(QuerySelectAllRecords, `SELECT  
+    id, ts, sender, topic, header_subject, body 
+FROM {{.Records}};`)
+	
 	store.Register(QuerySelectAnswerids, `-- answer ids
 SELECT id, sender
 FROM {{.Records}}
@@ -153,6 +161,13 @@ ORDER BY ts DESC`)
 FROM {{.Records}} 
 WHERE 
     id = $1`)
+	
+	store.Register(QuerySelectRecordDomain, `SELECT  
+    id, ts, sender, topic, header_subject, body, parent 
+FROM {{.Records}} 
+WHERE 
+    domain = $1
+    AND id = $2`)
 	
 	store.Register(QuerySelectRecordsSince, `SELECT  
     id, ts, sender, topic, header_subject, body 

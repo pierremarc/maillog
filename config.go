@@ -52,6 +52,7 @@ type config struct {
 	Domains     string `json:"tables/domains"`
 
 	Volume string `json:"volume/path"`
+	Index  string `json:"index/path"`
 }
 
 func (c config) Db() DbConfig {
@@ -103,4 +104,8 @@ func GetTables(fn string) Tables {
 func GetVolume(fn string) string {
 	conf := getConfig(fn)
 	return conf.Volume
+}
+func GetIndex(fn string) string {
+	conf := getConfig(fn)
+	return conf.Index
 }

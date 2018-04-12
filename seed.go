@@ -19,6 +19,9 @@ package main
 import (
 	"crypto/md5"
 	"fmt"
+	"strconv"
+
+	"github.com/jackc/pgx/pgtype"
 )
 
 func SeedAttachments(store Store, v Volume) {
@@ -56,4 +59,21 @@ func makeAttachment(store Store, v Volume, sender string, topic string, id int, 
 					}
 				})
 		})
+}
+
+func SeedIndex(store Store, i Index) {
+	q := store.QueryFunc(QuerySelectAllRecords)
+	var (
+		id            int
+		ts            pgtype.Timestamptz
+		sender        string
+		topic         string
+		headerSubject string
+		body          string
+	)
+	q(RowCallback(func() {
+		if !isSecretTopic(topic) {
+			i.Push(strconv.Itoa(id), IndexRecord{headerSubject, body})
+		}
+	}), &id, &ts, &sender, &topic, &headerSubject, body)
 }

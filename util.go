@@ -121,3 +121,15 @@ func getMainType(mt string) string {
 func ensureDir(dir string) {
 	os.MkdirAll(dir, os.ModePerm)
 }
+
+func pathExists(p string) bool {
+	_, err := os.Stat(p)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
+
+func isSecretTopic(t string) bool {
+	return strings.IndexRune(t, '_') == 0
+}

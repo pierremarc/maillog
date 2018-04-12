@@ -15,7 +15,7 @@
  */
 //go:generate futil -type func String=string Int=int
 //go:generate futil -type option -import time  String=string UInt64=uint64 Node=Node Time=time.Time Error=error  SerializedPart=SerializedPart Int=int UInt=uint
-//go:generate futil -type result -import io  -import net/mail -import github.com/jackc/pgx Bool=bool Node=Node ConnPool=*pgx.ConnPool  Error=error Store=Store  Message=*mail.Message SByte=[]byte String=string SerializedMessage=SerializedMessage Int=int  Reader=io.Reader
+//go:generate futil -type result -import io  -import net/mail -import github.com/jackc/pgx Bool=bool Node=Node ConnPool=*pgx.ConnPool  Error=error Store=Store  Message=*mail.Message SByte=[]byte String=string SerializedMessage=SerializedMessage Int=int  Reader=io.Reader Int64=int64
 //go:generate futil -type array   Int=int String=string Node=Node
 //go:generate webgen -output queries.go -what sql -prefix Query
 //go:generate webgen -output style.go -what css
@@ -26,6 +26,7 @@ import (
 	"flag"
 	"log"
 	"math"
+	"os"
 
 	"net/http"
 	_ "net/http/pprof"
@@ -36,12 +37,13 @@ import (
 const maxInt = int(^uint(0) >> 1)
 
 var (
-	configFile  string
-	smtpdI      string
-	httpdI      string
-	seed        bool
-	siteName    string
-	smtpMaxSize string
+	configFile      string
+	smtpdI          string
+	httpdI          string
+	seedAttachments bool
+	seedIndex       bool
+	siteName        string
+	smtpMaxSize     string
 )
 
 func GetSiteName() string {
@@ -58,7 +60,8 @@ func GetMaxSize() int {
 }
 
 func init() {
-	flag.BoolVar(&seed, "seed", false, "Regenerate attacments")
+	flag.BoolVar(&seedAttachments, "attachments", false, "Regenerate Attachments")
+	flag.BoolVar(&seedIndex, "index", false, "Regenerate Index")
 	flag.StringVar(&smtpMaxSize, "max-size", "12M", "Maximum message size")
 	flag.StringVar(&siteName, "name", "log", "A name for the root link")
 	flag.StringVar(&configFile, "config", "config.json", "configuration file")
@@ -83,17 +86,27 @@ func main() {
 	dbc := GetDbConfig(configFile)
 	tabs := GetTables(configFile)
 	vroot := GetVolume(configFile)
+	indexPath := GetIndex(configFile)
+
 	store := NewStore(dbc, tabs)
 	volume := NewVolume(vroot)
 	notif := NewNotifier()
+	index := MakeIndex(indexPath)
+
 	RegisterQueries(store)
-	if seed {
+	if seedAttachments {
 		SeedAttachments(store, volume)
-	} else {
-		cont := make(chan string)
-		go StartSMTP(cont, smtpdI, store, volume, notif)
-		go StartHTTP(cont, httpdI, store, volume, notif)
-		// go profiler()
-		controller(cont)
+		os.Exit(0)
 	}
+	if seedIndex {
+		SeedAttachments(store, volume)
+		os.Exit(0)
+	}
+
+	cont := make(chan string)
+	go StartSMTP(cont, smtpdI, store, volume, notif, index)
+	go StartHTTP(cont, httpdI, store, volume, notif, index)
+	// go profiler()
+	controller(cont)
+
 }

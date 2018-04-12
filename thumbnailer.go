@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 	"path"
 
 	"gopkg.in/gographics/imagick.v2/imagick"
@@ -81,12 +80,10 @@ func process(p string, s uint) ResultString {
 
 func GetThumbnail(p string, s uint) string {
 	sn := sizeName(p, s)
-	_, err := os.Stat(sn)
-	if os.IsNotExist(err) {
-		log.Printf("Err: os.Stat(%s) => %s", p, err.Error())
-		return process(p, s).FoldString(p, IdString)
+	if pathExists(sn) {
+		return sn
 	}
-	return sn
+	return process(p, s).FoldString(p, IdString)
 }
 
 func StopThumbnailer() {

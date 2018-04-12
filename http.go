@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"path"
 	"strconv"
@@ -521,7 +522,7 @@ func lastweek() string {
 	return fmt.Sprintf("%d-%02d-%02d", yy, my, dy)
 }
 
-func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
+func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string) {
 	handler := func(c echo.Context) error {
 		paramTopic := c.Param("topic")
 		q := store.QueryFunc(QuerySelectRecordsTopicSince, getHostDomain(c), paramTopic, lastweek())
@@ -625,18 +626,56 @@ func rssHandler(app *echo.Echo, store Store, v Volume, cont chan string, n *Noti
 	app.GET("/.rss/:topic", handler)
 }
 
-func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier) {
+func searchHandler(app *echo.Echo, store Store, v Volume, cont chan string, i Index) {
+
+	app.GET("/.search", func(c echo.Context) error {
+		termQuery := c.QueryParam("q")
+		domain := getHostDomain(c)
+		log.Printf("Search (%s) ", termQuery)
+		var (
+			id            int
+			ts            pgtype.Timestamptz
+			sender        string
+			topic         string
+			headerSubject string
+			body          string
+			parent        pgtype.Int4
+		)
+		var doc = makeDocument("root")
+		doc.body.Append(H1(ClassAttr("search-title"), Text(termQuery)))
+
+		results := i.Query(termQuery)
+
+		for _, r := range results {
+			store.QueryFunc(QuerySelectRecordDomain, domain, r)(RowCallback(func() {
+				url := fmt.Sprintf("/%s/%d", topic, id)
+				peek := body[:int(math.Min(float64(200), float64(len(body))))]
+				elem := Div(ClassAttr("search-result"),
+					H2(NewAttr(), A(ClassAttr("link").Set("href", url),
+						Textf("%s/%s", topic, headerSubject))),
+					Text(peek))
+
+				doc.body.Append(elem)
+			}), &id, &ts, &sender, &topic, &headerSubject, &body, &parent)
+		}
+
+		return c.HTML(http.StatusOK, doc.Render())
+	})
+}
+
+func regHTTPHandlers(app *echo.Echo, store Store, v Volume, cont chan string, n *Notifier, i Index) {
 	notifyHandler(app, store, v, cont, n)
-	rssHandler(app, store, v, cont, n)
+	rssHandler(app, store, v, cont)
 	listTopics(app, store, v, cont)
 	listInTopics(app, store, v, cont)
 	showMessage(app, store, v, cont)
 	showAttachment(app, store, v, cont)
+	searchHandler(app, store, v, cont, i)
 }
 
-func StartHTTP(cont chan string, iface string, store Store, v Volume, n *Notifier) {
+func StartHTTP(cont chan string, iface string, store Store, v Volume, n *Notifier, i Index) {
 	app := echo.New()
-	regHTTPHandlers(app, store, v, cont, n)
+	regHTTPHandlers(app, store, v, cont, n, i)
 	cont <- fmt.Sprintf("HTTP ready on %s", iface)
 	app.Start(iface)
 }

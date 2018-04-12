@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/pierremarc/smtpd"
@@ -41,7 +42,7 @@ func makeError(reason string) ErrorT {
 	}
 }
 
-func makeHandler(cont chan string, store Store, v Volume, n *Notifier) smtpd.Handler {
+func makeHandler(cont chan string, store Store, v Volume, n *Notifier, i Index) smtpd.Handler {
 
 	return func(origin net.Addr, from string, to []string, data []byte) {
 
@@ -126,6 +127,9 @@ func makeHandler(cont chan string, store Store, v Volume, n *Notifier) smtpd.Han
 					}
 
 					n.Notify(MakeNotification(topic, id, parent))
+					if !isSecretTopic(topic) {
+						i.Push(strconv.Itoa(id), IndexRecord{subjectHeader, body})
+					}
 
 					return fmt.Sprintf("Received [%s] => [%s]: %s",
 						from, recipient, subjectHeader)
@@ -168,8 +172,8 @@ func ListenAndServe(addr string, handler smtpd.Handler, rcpt smtpd.HandlerRcpt) 
 	return srv.ListenAndServe()
 }
 
-func StartSMTP(cont chan string, iface string, store Store, v Volume, n *Notifier) {
-	handler := makeHandler(cont, store, v, n)
+func StartSMTP(cont chan string, iface string, store Store, v Volume, n *Notifier, i Index) {
+	handler := makeHandler(cont, store, v, n, i)
 	rcpt := makeHandlerRcpt(store)
 	cont <- fmt.Sprintf("SMTPD ready on %s", iface)
 	ListenAndServe(iface, handler, rcpt)

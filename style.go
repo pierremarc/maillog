@@ -154,6 +154,10 @@ p.paragraph {
     padding-bottom: 1em;
 }
 
+.answer-body .viz-block {
+    margin: 1em 0;
+}
+
 img {
     max-width:100%;
 }
