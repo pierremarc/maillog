@@ -233,12 +233,16 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 		block := Div(
 			ClassAttr("answer-block").Set("data-record", strconv.Itoa(id)))
 
+		// headerBlock := Div(ClassAttr("message-header"),
+		// 	Div(ClassAttr("message-sender"), Text(senderName(sender))),
+		// 	Div(ClassAttr("message-date"), Text(formatTime(ts.Time))),
+		// 	Div(ClassAttr("answer-view"),
+		// 		A(ClassAttr("link").Set("href", url), Text("view"))),
+		// 	replyBlock(c, topic, id, subject))
+
 		headerBlock := Div(ClassAttr("message-header"),
-			Div(ClassAttr("message-sender"), Text(senderName(sender))),
-			Div(ClassAttr("message-date"), Text(formatTime(ts.Time))),
 			Div(ClassAttr("answer-view"),
-				A(ClassAttr("link").Set("href", url), Text("view"))),
-			replyBlock(c, topic, id, subject))
+				A(ClassAttr("section-link").Set("href", url), Text("§"))))
 
 		bodyBlock := Div(ClassAttr("answer-body"), NewRawNode(body), vas[id], nas[id])
 

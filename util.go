@@ -75,7 +75,7 @@ func getRecipent(to []string) OptionString {
 }
 
 func getDomains(tos []string) ArrayString {
-	domains := NewArrayString(tos...)
+	domains := ArrayStringFrom(tos...)
 	return domains.MapString(getDomain)
 }
 

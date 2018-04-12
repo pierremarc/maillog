@@ -93,7 +93,7 @@ func (r raw) SetAttr(string, string) Node {
 	return r
 }
 func (r raw) Children() ArrayNode {
-	return NewArrayNode()
+	return ArrayNodeFrom()
 }
 func (r raw) Append(ns ...Node) Node {
 	return r
@@ -118,7 +118,7 @@ func (n node) Children() ArrayNode {
 	return n.children
 }
 func (n *node) Append(ns ...Node) Node {
-	n.children = n.children.Concat(NewArrayNode(ns...))
+	n.children = n.children.Concat(ArrayNodeFrom(ns...))
 	return n
 }
 func (n *node) SetAttr(k string, v string) Node {
@@ -152,7 +152,7 @@ func createNode(tag string, attrs attributes, children ...Node) Node {
 	n := new(node)
 	n.tag = tag
 	n.attrs = attrs
-	n.children = NewArrayNode(children...)
+	n.children = ArrayNodeFrom(children...)
 	return n
 }
 

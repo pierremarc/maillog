@@ -54,6 +54,17 @@ a.link {
     font-family: monospace;
 }
 
+.section-link {
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 124%;
+    color: grey;
+}
+
+.section-link:hover {
+    color:black;
+}
+
 .message-body, .answer-body {
     padding: 0 0 0 1em;
     width: 42em;
@@ -94,7 +105,7 @@ img {
     max-width:100%;
 }
 
-.answer {
+/* .answer {
     border-left: 0 solid #2196f3;
     background-color: white;
 }
@@ -107,7 +118,7 @@ img {
 .answer.depth-6 {border-left-width: 10px;}
 .answer.depth-7 { border-left-width: 12px;}
 .answer.depth-8 { border-left-width: 14px;}
-
+ */
 
 
 .answer-link {
