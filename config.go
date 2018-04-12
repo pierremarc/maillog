@@ -31,8 +31,6 @@ type DbConfig struct {
 }
 
 type Tables struct {
-	RawMails    string
-	Answers     string
 	Records     string
 	Attachments string
 	Domains     string
@@ -44,18 +42,16 @@ type Config interface {
 }
 
 type config struct {
-	Host     string `json:host`
-	User     string `json:user`
-	Name     string `json:name`
-	Password string `json:password`
+	Host     string `json:"db/host"`
+	User     string `json:"db/user"`
+	Name     string `json:"db/name"`
+	Password string `json:"db/password"`
 
-	RawMails    string `rawmails`
-	Answers     string `answers`
-	Records     string `records`
-	Attachments string `attachments`
-	Domains     string `domains`
+	Records     string `json:"tables/records"`
+	Attachments string `json:"tables/attachments"`
+	Domains     string `json:"tables/domains"`
 
-	Volume string `volume`
+	Volume string `json:"volume/path"`
 }
 
 func (c config) Db() DbConfig {
@@ -68,8 +64,6 @@ func (c config) Db() DbConfig {
 }
 func (c config) Tables() Tables {
 	return Tables{
-		RawMails:    c.RawMails,
-		Answers:     c.Answers,
 		Records:     c.Records,
 		Attachments: c.Attachments,
 		Domains:     c.Domains,

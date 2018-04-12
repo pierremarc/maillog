@@ -110,11 +110,12 @@ a.link {
     text-decoration: none;
     font-weight: bold;
     font-size: 124%;
-    color: grey;
+    background-color: black;
+    color: black;
 }
 
 .section-link:hover {
-    color:black;
+    color:grey;
 }
 
 .message-body, .answer-body {

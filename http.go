@@ -192,7 +192,7 @@ func replyBlock(c echo.Context, topic string, id int, subject string) Node {
 		topic, id, getHostDomain(c), replySubject)
 
 	return Div(ClassAttr("answer-link"),
-		A(ClassAttr("link").Set("href", replyto), Text("reply")))
+		A(ClassAttr("link").Set("href", replyto), Text("Add Section")))
 }
 
 func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
@@ -242,7 +242,9 @@ func formatAnswers(pid string, store Store, c echo.Context, depth int) Node {
 
 		headerBlock := Div(ClassAttr("message-header"),
 			Div(ClassAttr("answer-view"),
-				A(ClassAttr("section-link").Set("href", url), Text("§"))))
+				A(ClassAttr("section-link").
+					Set("href", url).
+					Set("title", "View Message"), Text("§"))))
 
 		bodyBlock := Div(ClassAttr("answer-body"), NewRawNode(body), vas[id], nas[id])
 

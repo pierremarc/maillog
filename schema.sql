@@ -1,29 +1,3 @@
-CREATE TABLE public.raw_emails
-(
-  id serial,
-  sender varchar(256),
-  topic varchar(256),
-  subject varchar(256),
-  message text
-);
-
-
-CREATE TABLE public.answers
-(
-  id serial,
-  parent int,
-  child int
-);
-
-
-CREATE TABLE public.raw_emails2
-(
-  id serial,
-  sender varchar(256),
-  topic varchar(256),
-  subject varchar(256),
-  message bytea
-);
 
 CREATE TABLE public.records (
   id serial,
@@ -45,7 +19,6 @@ CREATE TABLE public.attachments (
   content_type varchar(256),
   file_name varchar(256)
 );
-
 
 
 CREATE TABLE domains (
