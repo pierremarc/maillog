@@ -9,8 +9,8 @@ body {
 
 body[data-page=root] > .header, body[data-page=thread] > .header {
     margin: 1em auto;
-    padding-bottom: 1em;
-    border-bottom: 0.5px solid black;
+    /* padding-bottom: 1em; */
+    /* border-bottom: 0.5px solid black; */
 }
 
 body[data-page=message] > .header {
@@ -138,8 +138,10 @@ img {
 
 
 .topic {
-    margin-bottom: 1em;
+    margin-bottom: 0.5em;
     font-size: 120%;
+    width: 300px;
+    float: left;
 }
 .topic-count{
     font-size: small;
@@ -192,8 +194,9 @@ span.message-item-ts {
     font-size: 80%;
     line-height: 120%;
     margin-bottom: 1em;
-    border-bottom: 0.5px solid black;
+    /* border-bottom: 0.5px solid black; */
     padding-bottom: 1em;
+    max-width: 400px;
 }
 
 .first-subject {
@@ -207,6 +210,24 @@ span.message-item-ts {
 .new-reply {
     background-color: #ffefbf;
 }
+
+.search-box {
+    margin-bottom: 1em;
+}
+
+.topic-info {
+    font-size: 80%;
+    line-height: 140%;
+}
+
+.search-result {
+    margin-bottom: .5em;
+}
+.search-result p {
+    font-size: 80%;
+    line-height: 140%;
+}
+
 
 @media screen and (orientation: portrait), screen and (max-width: 48em)  {
 body {

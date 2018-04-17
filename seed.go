@@ -75,5 +75,5 @@ func SeedIndex(store Store, i Index) {
 		if !isSecretTopic(topic) {
 			i.Push(strconv.Itoa(id), IndexRecord{headerSubject, body})
 		}
-	}), &id, &ts, &sender, &topic, &headerSubject, body)
+	}), &id, &ts, &sender, &topic, &headerSubject, &body)
 }

@@ -254,7 +254,7 @@ func decodeContent(input []byte, cte string) []byte {
 			return content
 		}
 
-	case "7bit":
+	case "7bit", "quoted-printable":
 		{
 			r := quotedprintable.NewReader(bytes.NewReader(input))
 			content, err := ioutil.ReadAll(r)

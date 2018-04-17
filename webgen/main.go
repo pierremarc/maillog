@@ -23,6 +23,7 @@ import (
 	"go/build"
 	"io/ioutil"
 	"log"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -58,10 +59,12 @@ type fileMap map[string]string
 
 func (g *generator) generate() ([]byte, error) {
 	var files = make(fileMap)
-	templatePath := path.Join(".", g.what+".tpl")
+	templatePath := path.Join(os.Getenv("GOPATH"),
+		"src/github.com/pierremarc/maillog/webgen", g.what+".tpl")
 	rootPath := path.Join(".", g.what)
 	globPat := "/*." + g.what
 
+	log.Printf("Loading template: %s", templatePath)
 	tb, _ := ioutil.ReadFile(templatePath)
 	nt := template.New(g.what)
 	nt.Funcs(funcMap)
@@ -132,4 +135,5 @@ func main() {
 	if err = ioutil.WriteFile(*outputName, src, 0644); err != nil {
 		log.Fatalf("writing output: %s", err)
 	}
+	log.Printf("Output written to %s", *outputName)
 }

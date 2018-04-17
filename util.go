@@ -50,7 +50,7 @@ func decodeSubject(s string) string {
 
 func formatTimeDate(t time.Time) string {
 	y, m, d := t.Date()
-	return fmt.Sprintf("%d-%d-%d", y, m, d)
+	return fmt.Sprintf("%d-%02d-%02d", y, m, d)
 }
 
 func formatTime(t time.Time) string {

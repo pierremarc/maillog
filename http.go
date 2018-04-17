@@ -44,6 +44,10 @@ func rootHeader(c echo.Context) Node {
 	return Div(ClassAttr("header"), H1(ClassAttr("title"), Text(getHostDomain(c))))
 }
 
+func searchHeader(c echo.Context) Node {
+	return Div(ClassAttr("header"), H1(ClassAttr("title"), Textf("Search on %s", getHostDomain(c))))
+}
+
 func header(c echo.Context, title string, args ...string) Node {
 	r := Div(ClassAttr("header"))
 	bc := Div(ClassAttr("bc"), link("/", "/"+getHostDomain(c)))
@@ -75,6 +79,15 @@ func makeDocument(page string, hn ...Node) document {
 	return doc
 }
 
+func searchForm(value string) Node {
+	return Div(ClassAttr("search-box"),
+		Form(NewAttr().
+			Set("action", "/.search").
+			Set("method", "get"),
+			Input(NewAttr().Set("type", "text").Set("name", "q").Set("value", value)),
+			Input(NewAttr().Set("type", "submit").Set("value", "search"))))
+}
+
 func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 
 	app.GET("/", func(c echo.Context) error {
@@ -87,15 +100,15 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 			mts   pgtype.Timestamp
 		)
 
-		doc.body.Append(rootHeader(c))
+		doc.body.Append(rootHeader(c), searchForm(""))
 		attrs := ClassAttr("topic")
 
 		return q(RowCallback(func() {
 			doc.body.Append(Div(attrs,
 				A(ClassAttr("topic-link link").Set("href", "/"+topic),
 					Text(topic)),
-				Span(ClassAttr("topic-count"), Textf("(%d),", count)),
-				Span(ClassAttr("topic-ts"), Textf("(last update: %s)", formatTimestamp(mts.Time)))))
+				P(ClassAttr("topic-info"),
+					Textf("Last contribution of %d on %s.", count, formatTimeDate(mts.Time)))))
 		}), &topic, &count, &mts).
 			FoldErrorF(
 				func(err error) error {
@@ -172,8 +185,7 @@ func listInTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 			doc.body.Append(Div(ClassAttr("message-item"),
 				A(ClassAttr("message-link link").Set("href", url),
 					Text(ensureSubject(subject))),
-				Span(ClassAttr("message-item-sender"), Text(senderName(sender))),
-				Span(ClassAttr("message-item-ts"), Textf(formatTimestamp(ts.Time)))))
+				Span(ClassAttr("message-item-sender"), Textf("from %s", senderName(sender)))))
 		}), &id, &ts, &sender, &subject).
 			FoldErrorF(
 				func(err error) error {
@@ -642,7 +654,7 @@ func searchHandler(app *echo.Echo, store Store, v Volume, cont chan string, i In
 			parent        pgtype.Int4
 		)
 		var doc = makeDocument("root")
-		doc.body.Append(H1(ClassAttr("search-title"), Text(termQuery)))
+		doc.body.Append(searchHeader(c), searchForm(termQuery))
 
 		results := i.Query(termQuery)
 
@@ -653,7 +665,7 @@ func searchHandler(app *echo.Echo, store Store, v Volume, cont chan string, i In
 				elem := Div(ClassAttr("search-result"),
 					H2(NewAttr(), A(ClassAttr("link").Set("href", url),
 						Textf("%s/%s", topic, headerSubject))),
-					Text(peek))
+					P(NewAttr(), Text(peek)))
 
 				doc.body.Append(elem)
 			}), &id, &ts, &sender, &topic, &headerSubject, &body, &parent)

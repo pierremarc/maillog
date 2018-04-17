@@ -99,7 +99,7 @@ func main() {
 		os.Exit(0)
 	}
 	if seedIndex {
-		SeedAttachments(store, volume)
+		SeedIndex(store, index)
 		os.Exit(0)
 	}
 

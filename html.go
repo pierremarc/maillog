@@ -180,6 +180,8 @@ var (
 	Script    = htmlFactory("SCRIPT")
 	HeadLink  = htmlFactory("LINK")
 	HeadMeta  = htmlFactory("META")
+	Form      = htmlFactory("FORM")
+	Input     = htmlFactory("INPUT")
 )
 
 func Text(content string) Node {
