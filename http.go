@@ -108,7 +108,7 @@ func listTopics(app *echo.Echo, store Store, v Volume, cont chan string) {
 				A(ClassAttr("topic-link link").Set("href", "/"+topic),
 					Text(topic)),
 				P(ClassAttr("topic-info"),
-					Textf("Last contribution of %d on %s.", count, formatTimeDate(mts.Time)))))
+					Textf("%s ⚫ %d", formatTimeDate(mts.Time), count))))
 		}), &topic, &count, &mts).
 			FoldErrorF(
 				func(err error) error {

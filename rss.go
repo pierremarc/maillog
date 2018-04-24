@@ -44,8 +44,7 @@ func MakeRSS() Node {
 		Set("version", "2.0").
 		Set("xmlns:media", "http://search.yahoo.com/mrss/").
 		Set("xmlns:atom", "http://www.w3.org/2005/Atom").
-		Set("xmlns:dc", "http://purl.org/dc/elements/1.1/").
-		Set("xmlns:media", "http://search.yahoo.com/mrss/"))
+		Set("xmlns:dc", "http://purl.org/dc/elements/1.1/"))
 }
 
 func MakeRssChannel(title string, link string, desc string, self string) Node {

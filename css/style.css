@@ -71,6 +71,28 @@ a.link {
     width: 42em;
 }
 
+.message-body p, .answer-body p {
+    min-height: 1em;
+}
+
+h1 {
+    font-size: 300%;
+}
+h2 {
+    font-size: 180%;
+}
+h3 {
+    font-size: 120%;
+    font-weight: bold;
+}
+
+em {
+    font-style: italic;
+}
+strong {
+    font-weight: bold;
+}
+
 .message-sender {
     /* font-style: italic; */
     font-size: 90%;
@@ -88,14 +110,6 @@ a.link {
 font-size: 80%;
 }
 
-/* .message-block > .message-header > a {
-    font-size: 80%;
-    position: absolute;
-    right: 0;
-    margin-top: 0.2em;
-} */
-
- 
 
 
 p.paragraph {
@@ -110,26 +124,6 @@ img {
     max-width:100%;
 }
 
-/* .answer {
-    border-left: 0 solid #2196f3;
-    background-color: white;
-}
-
-.answer.depth-1 { border-left-width: 1px; }
-.answer.depth-2 { border-left-width: 2px; }
-.answer.depth-3 { border-left-width: 4px; }
-.answer.depth-4 { border-left-width: 6px;}
-.answer.depth-5 { border-left-width: 8px;}
-.answer.depth-6 {border-left-width: 10px;}
-.answer.depth-7 { border-left-width: 12px;}
-.answer.depth-8 { border-left-width: 14px;}
- */
-
-
-.answer-link {
-/* margin-top: .3em; */
-}
-
 .answer-link a.link {
     color:#2196f3;
     font-size: 80%;
@@ -138,11 +132,16 @@ img {
 
 
 .topic {
-    margin-bottom: 0.5em;
+    margin-bottom: 1em;
     font-size: 120%;
     width: 300px;
     float: left;
 }
+
+.topic .topic-link {
+    font-size: 140%;
+}
+
 .topic-count{
     font-size: small;
 }
@@ -216,8 +215,10 @@ span.message-item-ts {
 }
 
 .topic-info {
-    font-size: 80%;
+    font-size: 60%;
     line-height: 140%;
+    margin-top: .5em;
+    color: #565151;
 }
 
 .search-result {
