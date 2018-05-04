@@ -81,10 +81,12 @@ func (g *generator) generate() ([]byte, error) {
 	}
 
 	data := struct {
+		Package   string
 		Timestamp time.Time
 		Prefix    string
 		Files     fileMap
 	}{
+		g.packageName,
 		time.Now().UTC(),
 		g.prefix,
 		files,

@@ -1,20 +1,17 @@
-/*
- *  Copyright (C) 2018 Pierre Marchand <pierre.m@atelier-cartographique.be>
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU Affero General Public License as published by
- *  the Free Software Foundation, version 3 of the License.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 package main
+
+import (
+	"encoding/base64"
+)
+
+func base64decodeSql(input string) string {
+    content, err := base64.StdEncoding.DecodeString(input)
+    if err != nil {
+        return input
+    }
+    return string(content)
+}
+
 
 
 const QueryInsertAttachment = "InsertAttachment"
@@ -58,146 +55,42 @@ const QueryTruncateAttachments = "TruncateAttachments"
 
 func RegisterQueries(store Store) {
 	
-	store.Register(QueryInsertAttachment, `-- insert attachment
-
-INSERT INTO {{.Attachments}}
-    (record_id, content_type, file_name)
-VALUES 
-    ($1, $2, $3)`)
+	store.Register(QueryInsertAttachment, base64decodeSql(`LS0gaW5zZXJ0IGF0dGFjaG1lbnQKCklOU0VSVCBJTlRPIHt7LkF0dGFjaG1lbnRzfX0KICAgIChyZWNvcmRfaWQsIGNvbnRlbnRfdHlwZSwgZmlsZV9uYW1lKQpWQUxVRVMgCiAgICAoJDEsICQyLCAkMyk=`))
 	
-	store.Register(QueryInsertRecord, `-- insert record
-
-INSERT INTO {{.Records}} 
-(
-    sender, 
-    recipient, 
-    topic, 
-    domain, 
-    header_date, 
-    header_subject, 
-    body, 
-    payload
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id`)
+	store.Register(QueryInsertRecord, base64decodeSql(`LS0gaW5zZXJ0IHJlY29yZAoKSU5TRVJUIElOVE8ge3suUmVjb3Jkc319IAooCiAgICBzZW5kZXIsIAogICAgcmVjaXBpZW50LCAKICAgIHRvcGljLCAKICAgIGRvbWFpbiwgCiAgICBoZWFkZXJfZGF0ZSwgCiAgICBoZWFkZXJfc3ViamVjdCwgCiAgICBib2R5LCAKICAgIHBheWxvYWQKKQpWQUxVRVMgKCQxLCAkMiwgJDMsICQ0LCAkNSwgJDYsICQ3LCAkOCkKUkVUVVJOSU5HIGlk`))
 	
-	store.Register(QueryInsertRecordParent, `-- insert record
-
-INSERT INTO {{.Records}} 
-(
-    sender, 
-    recipient, 
-    topic, 
-    domain, 
-    header_date, 
-    header_subject, 
-    body, 
-    payload, 
-    parent
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id`)
+	store.Register(QueryInsertRecordParent, base64decodeSql(`LS0gaW5zZXJ0IHJlY29yZAoKSU5TRVJUIElOVE8ge3suUmVjb3Jkc319IAooCiAgICBzZW5kZXIsIAogICAgcmVjaXBpZW50LCAKICAgIHRvcGljLCAKICAgIGRvbWFpbiwgCiAgICBoZWFkZXJfZGF0ZSwgCiAgICBoZWFkZXJfc3ViamVjdCwgCiAgICBib2R5LCAKICAgIHBheWxvYWQsIAogICAgcGFyZW50CikKVkFMVUVTICgkMSwgJDIsICQzLCAkNCwgJDUsICQ2LCAkNywgJDgsICQ5KQpSRVRVUk5JTkcgaWQ=`))
 	
-	store.Register(QuerySelectAllPayloads, `SELECT  
-    id, sender, topic, payload
-FROM {{.Records}}`)
+	store.Register(QuerySelectAllPayloads, base64decodeSql(`U0VMRUNUICAKICAgIGlkLCBzZW5kZXIsIHRvcGljLCBwYXlsb2FkCkZST00ge3suUmVjb3Jkc319`))
 	
-	store.Register(QuerySelectAllRecords, `SELECT  
-    id, ts, sender, topic, header_subject, body 
-FROM {{.Records}};`)
+	store.Register(QuerySelectAllRecords, base64decodeSql(`U0VMRUNUICAKICAgIGlkLCB0cywgc2VuZGVyLCB0b3BpYywgaGVhZGVyX3N1YmplY3QsIGJvZHkgCkZST00ge3suUmVjb3Jkc319Ow==`))
 	
-	store.Register(QuerySelectAnswerids, `-- answer ids
-SELECT id, sender
-FROM {{.Records}}
-WHERE parent = $1
-ORDER BY ts ASC`)
+	store.Register(QuerySelectAnswerids, base64decodeSql(`LS0gYW5zd2VyIGlkcwpTRUxFQ1QgaWQsIHNlbmRlcgpGUk9NIHt7LlJlY29yZHN9fQpXSEVSRSBwYXJlbnQgPSAkMQpPUkRFUiBCWSB0cyBBU0M=`))
 	
-	store.Register(QuerySelectAnswers, `-- answers
-SELECT  
-    id, ts, sender, topic, header_subject, body, parent 
-FROM {{.Records}} 
-WHERE parent = $1
-ORDER BY ts ASC`)
+	store.Register(QuerySelectAnswers, base64decodeSql(`LS0gYW5zd2VycwpTRUxFQ1QgIAogICAgaWQsIHRzLCBzZW5kZXIsIHRvcGljLCBoZWFkZXJfc3ViamVjdCwgYm9keSwgcGFyZW50IApGUk9NIHt7LlJlY29yZHN9fSAKV0hFUkUgcGFyZW50ID0gJDEKT1JERVIgQlkgdHMgQVND`))
 	
-	store.Register(QuerySelectAttachment, `-- attachment (single)
-SELECT content_type, file_name
-FROM {{.Attachments}}
-WHERE 
-    record_id = $1 
-    AND file_name = $2`)
+	store.Register(QuerySelectAttachment, base64decodeSql(`LS0gYXR0YWNobWVudCAoc2luZ2xlKQpTRUxFQ1QgY29udGVudF90eXBlLCBmaWxlX25hbWUKRlJPTSB7ey5BdHRhY2htZW50c319CldIRVJFIAogICAgcmVjb3JkX2lkID0gJDEgCiAgICBBTkQgZmlsZV9uYW1lID0gJDI=`))
 	
-	store.Register(QuerySelectAttachments, `SELECT record_id, content_type, file_name
-FROM {{.Attachments}}
-WHERE record_id = $1`)
+	store.Register(QuerySelectAttachments, base64decodeSql(`U0VMRUNUIHJlY29yZF9pZCwgY29udGVudF90eXBlLCBmaWxlX25hbWUKRlJPTSB7ey5BdHRhY2htZW50c319CldIRVJFIHJlY29yZF9pZCA9ICQx`))
 	
-	store.Register(QuerySelectDomainMx, `SELECT 
-    id
-FROM {{.Domains}}
-WHERE mx_name = $1`)
+	store.Register(QuerySelectDomainMx, base64decodeSql(`U0VMRUNUIAogICAgaWQKRlJPTSB7ey5Eb21haW5zfX0KV0hFUkUgbXhfbmFtZSA9ICQx`))
 	
-	store.Register(QuerySelectDomains, `SELECT 
-    http_name, mx_name
-FROM {{.Domains}}`)
+	store.Register(QuerySelectDomains, base64decodeSql(`U0VMRUNUIAogICAgaHR0cF9uYW1lLCBteF9uYW1lCkZST00ge3suRG9tYWluc319`))
 	
-	store.Register(QuerySelectFirstRecord, `SELECT  
-    id, ts, sender, header_subject 
-FROM {{.Records}} 
-WHERE
-    domain = $1
-    AND topic = $2
-ORDER BY ts  ASC
-LIMIT 1`)
+	store.Register(QuerySelectFirstRecord, base64decodeSql(`U0VMRUNUICAKICAgIGlkLCB0cywgc2VuZGVyLCBoZWFkZXJfc3ViamVjdCAKRlJPTSB7ey5SZWNvcmRzfX0gCldIRVJFCiAgICBkb21haW4gPSAkMQogICAgQU5EIHRvcGljID0gJDIKT1JERVIgQlkgdHMgIEFTQwpMSU1JVCAx`))
 	
-	store.Register(QuerySelectIntopic, `SELECT id, ts, sender, header_subject
-FROM {{.Records}}  
-WHERE 
-    domain = $1
-    AND topic = $2 
-    AND parent IS NULL 
-ORDER BY ts DESC`)
+	store.Register(QuerySelectIntopic, base64decodeSql(`U0VMRUNUIGlkLCB0cywgc2VuZGVyLCBoZWFkZXJfc3ViamVjdApGUk9NIHt7LlJlY29yZHN9fSAgCldIRVJFIAogICAgZG9tYWluID0gJDEKICAgIEFORCB0b3BpYyA9ICQyIAogICAgQU5EIHBhcmVudCBJUyBOVUxMIApPUkRFUiBCWSB0cyBERVND`))
 	
-	store.Register(QuerySelectRecord, `SELECT  
-    id, ts, sender, topic, header_subject, body, parent 
-FROM {{.Records}} 
-WHERE 
-    id = $1`)
+	store.Register(QuerySelectRecord, base64decodeSql(`U0VMRUNUICAKICAgIGlkLCB0cywgc2VuZGVyLCB0b3BpYywgaGVhZGVyX3N1YmplY3QsIGJvZHksIHBhcmVudCAKRlJPTSB7ey5SZWNvcmRzfX0gCldIRVJFIAogICAgaWQgPSAkMQ==`))
 	
-	store.Register(QuerySelectRecordDomain, `SELECT  
-    id, ts, sender, topic, header_subject, body, parent 
-FROM {{.Records}} 
-WHERE 
-    domain = $1
-    AND id = $2`)
+	store.Register(QuerySelectRecordDomain, base64decodeSql(`U0VMRUNUICAKICAgIGlkLCB0cywgc2VuZGVyLCB0b3BpYywgaGVhZGVyX3N1YmplY3QsIGJvZHksIHBhcmVudCAKRlJPTSB7ey5SZWNvcmRzfX0gCldIRVJFIAogICAgZG9tYWluID0gJDEKICAgIEFORCBpZCA9ICQy`))
 	
-	store.Register(QuerySelectRecordsSince, `SELECT  
-    id, ts, sender, topic, header_subject, body 
-FROM {{.Records}} 
-WHERE 
-    domain = $1
-    AND ts >= $2::date`)
+	store.Register(QuerySelectRecordsSince, base64decodeSql(`U0VMRUNUICAKICAgIGlkLCB0cywgc2VuZGVyLCB0b3BpYywgaGVhZGVyX3N1YmplY3QsIGJvZHkgCkZST00ge3suUmVjb3Jkc319IApXSEVSRSAKICAgIGRvbWFpbiA9ICQxCiAgICBBTkQgdHMgPj0gJDI6OmRhdGU=`))
 	
-	store.Register(QuerySelectRecordsTopicSince, `SELECT  
-    id, ts, sender, topic, header_subject, body 
-FROM {{.Records}} 
-WHERE 
-    domain = $1
-    AND topic = $2
-    AND ts >= $3::date
-    AND parent IS NULL `)
+	store.Register(QuerySelectRecordsTopicSince, base64decodeSql(`U0VMRUNUICAKICAgIGlkLCB0cywgc2VuZGVyLCB0b3BpYywgaGVhZGVyX3N1YmplY3QsIGJvZHkgCkZST00ge3suUmVjb3Jkc319IApXSEVSRSAKICAgIGRvbWFpbiA9ICQxCiAgICBBTkQgdG9waWMgPSAkMgogICAgQU5EIHRzID49ICQzOjpkYXRlCiAgICBBTkQgcGFyZW50IElTIE5VTEwg`))
 	
-	store.Register(QuerySelectTopics, `SELECT 
-    DISTINCT(topic) 
-    topic, 
-    count(id) as count, 
-    max(ts) as mts
-FROM {{.Records}} 
-WHERE
-    domain = $1
-    AND strpos(topic, '_') <> 1
-GROUP BY topic
-ORDER BY topic ASC`)
+	store.Register(QuerySelectTopics, base64decodeSql(`U0VMRUNUIAogICAgRElTVElOQ1QodG9waWMpIAogICAgdG9waWMsIAogICAgY291bnQoaWQpIGFzIGNvdW50LCAKICAgIG1heCh0cykgYXMgbXRzCkZST00ge3suUmVjb3Jkc319IApXSEVSRQogICAgZG9tYWluID0gJDEKICAgIEFORCBzdHJwb3ModG9waWMsICdfJykgPD4gMQpHUk9VUCBCWSB0b3BpYwpPUkRFUiBCWSB0b3BpYyBBU0M=`))
 	
-	store.Register(QueryTruncateAttachments, `-- truncate attachments table (generally before regenerating with sedd option)
-TRUNCATE TABLE {{.Attachments}};`)
+	store.Register(QueryTruncateAttachments, base64decodeSql(`LS0gdHJ1bmNhdGUgYXR0YWNobWVudHMgdGFibGUgKGdlbmVyYWxseSBiZWZvcmUgcmVnZW5lcmF0aW5nIHdpdGggc2VkZCBvcHRpb24pClRSVU5DQVRFIFRBQkxFIHt7LkF0dGFjaG1lbnRzfX07`))
 	
 }
