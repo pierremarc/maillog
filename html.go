@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
-	blackfriday "gopkg.in/russross/blackfriday.v2"
+	blackfriday "github.com/russross/blackfriday/v2"
 )
 
 const textNodeTag = "__TEXT_NODE_TAG__"

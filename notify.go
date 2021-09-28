@@ -20,7 +20,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 type Receiver func(Notification)
@@ -67,7 +67,7 @@ func (b *Notifier) Notify(n Notification) {
 }
 
 func (b *Notifier) Subscribe(r Receiver) uuid.UUID {
-	id := uuid.Must(uuid.NewV4())
+	id := uuid.Must(uuid.NewV4(), nil)
 	log.Printf("Notifier.Subscribe %s", id.String())
 	b.clients = append(b.clients, sucscription{id, r})
 	return id
